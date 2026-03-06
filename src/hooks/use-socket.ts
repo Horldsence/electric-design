@@ -9,7 +9,7 @@ export default function useSocket() {
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-    let reconnectTimeout: any
+    let reconnectTimeout: ReturnType<typeof setTimeout> | undefined
 
     const connect = () => {
       if (
@@ -31,11 +31,11 @@ export default function useSocket() {
         setStatus('connected')
       }
 
-      ws.onmessage = (event) => {
+      ws.onmessage = event => {
         try {
           const message = JSON.parse(event.data)
           if (message.type === 'log') {
-            setLogs((prev) => [...prev, message.payload])
+            setLogs(prev => [...prev, message.payload])
           }
         } catch (e) {
           console.error('Failed to parse WebSocket message', e)
@@ -49,7 +49,7 @@ export default function useSocket() {
         reconnectTimeout = setTimeout(connect, 3000)
       }
 
-      ws.onerror = (error) => {
+      ws.onerror = error => {
         console.error('WebSocket error:', error)
         setStatus('error')
       }

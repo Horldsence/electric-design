@@ -173,8 +173,9 @@ function parseViolations(
   try {
     const parsed = JSON.parse(stdout || '{}')
 
-    const errors: Array<{ type: string; message: string; location?: any }> = []
-    const warnings: Array<{ type: string; message: string; location?: any }> = []
+    const errors: Array<{ type: string; message: string; location?: Record<string, unknown> }> = []
+    const warnings: Array<{ type: string; message: string; location?: Record<string, unknown> }> =
+      []
 
     if (parsed.violations && Array.isArray(parsed.violations)) {
       log.debug('Parsing violations', { count: parsed.violations.length })
@@ -201,12 +202,24 @@ function parseViolations(
         throw new KiCadValidationError(
           `${checkType.toUpperCase()} found ${errors.length} error(s) and ${warnings.length} warning(s)`,
           checkType,
-          parsed.violations.map((v: any) => ({
-            type: v.type || v.rule || `${checkType}_error`,
-            description: v.description || v.message || 'No description',
-            severity: (v.severity === 'error' ? 'error' : 'warning') as 'error' | 'warning',
-            position: v.x !== undefined ? { x: v.x, y: v.y } : undefined,
-            items: v.items || [],
+          parsed.violations.map((v: Record<string, unknown>) => ({
+            type:
+              (typeof v.type === 'string' && v.type) ||
+              (typeof v.rule === 'string' && v.rule) ||
+              `${checkType}_error`,
+            description:
+              (typeof v.description === 'string' && v.description) ||
+              (typeof v.message === 'string' && v.message) ||
+              'No description',
+            severity: v.severity === 'error' ? 'error' : 'warning',
+            position:
+              v.x !== undefined
+                ? {
+                    x: v.x,
+                    y: v.y,
+                  }
+                : undefined,
+            items: Array.isArray(v.items) ? v.items : [],
           })),
         )
       }
@@ -239,8 +252,8 @@ function parseTextOutput(
   exitCode: number,
   checkType: 'erc' | 'drc',
 ): ErcResult | DrcResult {
-  const errors: Array<{ type: string; message: string; location?: any }> = []
-  const warnings: Array<{ type: string; message: string; location?: any }> = []
+  const errors: Array<{ type: string; message: string; location?: Record<string, unknown> }> = []
+  const warnings: Array<{ type: string; message: string; location?: Record<string, unknown> }> = []
 
   const combinedOutput = `${stdout}\n${stderr}`
   const lines = combinedOutput.split('\n')

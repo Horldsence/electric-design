@@ -9,7 +9,7 @@ export type WebSocketData = {
 
 export type WebSocketMessage = {
   type: string
-  payload?: any
+  payload?: unknown
 }
 
 class SocketManager {
@@ -42,9 +42,9 @@ class SocketManager {
     logger.debug('socket', `Client connected: ${ws.data.id}`)
   }
 
-  handleMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
+  handleMessage(_ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
     try {
-      const data = typeof message === 'string' ? JSON.parse(message) : message
+      const _data = typeof message === 'string' ? JSON.parse(message) : message
       // Future: handle client messages
     } catch (e) {
       logger.error('socket', 'Failed to parse message', e)

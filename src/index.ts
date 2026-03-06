@@ -1,9 +1,16 @@
-import { serve } from 'bun'
+import { type ServerWebSocket, serve } from 'bun'
 import index from './index.html'
 import { getConfig, isDevelopment } from './lib/config'
+import { type WebSocketData, socketManager } from './lib/socket-manager'
 import { POST as compilePost } from './routes/compile'
 import { POST as compileAndConvertPost } from './routes/compile-and-convert'
 import { POST as convertPost } from './routes/convert'
+import {
+  downloadBomFile,
+  downloadGerbers,
+  downloadKiCad,
+  downloadSchematic,
+} from './routes/download'
 import { POST as exportPost } from './routes/export'
 import { POST as generatePost } from './routes/generate'
 import {
@@ -13,13 +20,6 @@ import {
   exportGerber,
   validateKiCad,
 } from './routes/validate-kicad'
-import {
-  downloadKiCad,
-  downloadSchematic,
-  downloadGerbers,
-  downloadBomFile,
-} from './routes/download'
-import { socketManager, type WebSocketData } from './lib/socket-manager'
 
 const _config = getConfig()
 
@@ -28,13 +28,13 @@ const server = serve<WebSocketData>({
     '/': index,
 
     '/api/hello': {
-      async GET(_req) {
+      async GET(_req: Request) {
         return Response.json({
           message: 'Hello, world!',
           method: 'GET',
         })
       },
-      async PUT(_req) {
+      async PUT(_req: Request) {
         return Response.json({
           message: 'Hello, world!',
           method: 'PUT',
@@ -42,8 +42,8 @@ const server = serve<WebSocketData>({
       },
     },
 
-    '/api/hello/:name': async req => {
-      const name = req.params.name
+    '/api/hello/:name': async (req: Request) => {
+      const name = new URL(req.url).pathname.split('/').pop() ?? 'world'
       return Response.json({
         message: `Hello, ${name}!`,
       })
@@ -122,9 +122,10 @@ const server = serve<WebSocketData>({
   },
 
   websocket: {
-    message: (ws, message) => socketManager.handleMessage(ws, message),
-    open: (ws) => socketManager.handleOpen(ws),
-    close: (ws) => socketManager.handleClose(ws),
+    message: (ws: ServerWebSocket<WebSocketData>, message) =>
+      socketManager.handleMessage(ws, message),
+    open: (ws: ServerWebSocket<WebSocketData>) => socketManager.handleOpen(ws),
+    close: (ws: ServerWebSocket<WebSocketData>) => socketManager.handleClose(ws),
   },
 
   development: isDevelopment() && {

@@ -1,4 +1,3 @@
-import type { Request } from 'bun'
 import { createPipelineLogger } from '../lib/debug'
 import {
   analyzeValidationErrors,

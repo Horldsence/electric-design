@@ -1,4 +1,5 @@
 import { runTscircuitCode } from '@tscircuit/eval'
+import type { AnyCircuitElement } from 'circuit-json'
 
 async function testConnection() {
   const code = `
@@ -15,15 +16,16 @@ export default () => (
   console.log('Circuit JSON (', json.length, 'elements):')
   console.log(JSON.stringify(json, null, 2))
 
-  const traces = json.filter((e: any) => e.type === 'source_trace')
+  const traces = json.filter((e: AnyCircuitElement) => e.type === 'source_trace')
   console.log('\n\nFound', traces.length, 'traces:')
-  traces.forEach((t: any) => console.log(JSON.stringify(t, null, 2)))
+  traces.forEach((t: AnyCircuitElement) => console.log(JSON.stringify(t, null, 2)))
 
   const components = json.filter(
-    (e: any) => e.type === 'source_component' || e.type?.includes('component'),
+    (e: AnyCircuitElement) =>
+      e.type === 'source_component' || (typeof e.type === 'string' && e.type.includes('component')),
   )
   console.log('\n\nFound', components.length, 'components:')
-  components.forEach((c: any) => console.log(JSON.stringify(c, null, 2)))
+  components.forEach((c: AnyCircuitElement) => console.log(JSON.stringify(c, null, 2)))
 }
 
 testConnection().catch(console.error)

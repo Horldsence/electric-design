@@ -1,6 +1,6 @@
-import { compilerService } from '../services/tscircuit/compiler'
 import { convertToKiCad } from '../services/kicad/converter'
-import { generateGerber, generateBom } from '../services/kicad/validator'
+import { generateBom, generateGerber } from '../services/kicad/validator'
+import { compilerService } from '../services/tscircuit/compiler'
 
 /**
  * POST /api/download-kicad
@@ -22,10 +22,7 @@ export async function downloadKiCad(req: Request): Promise<Response> {
     }
 
     if (!circuit || !Array.isArray(circuit)) {
-      return Response.json(
-        { error: 'Circuit JSON is required' },
-        { status: 400 }
-      )
+      return Response.json({ error: 'Circuit JSON is required' }, { status: 400 })
     }
 
     // Convert to KiCad
@@ -44,7 +41,7 @@ export async function downloadKiCad(req: Request): Promise<Response> {
         error: 'Failed to generate KiCad file',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -68,10 +65,7 @@ export async function downloadSchematic(req: Request): Promise<Response> {
     }
 
     if (!circuit || !Array.isArray(circuit)) {
-      return Response.json(
-        { error: 'Circuit JSON is required' },
-        { status: 400 }
-      )
+      return Response.json({ error: 'Circuit JSON is required' }, { status: 400 })
     }
 
     const kicadFiles = convertToKiCad(circuit)
@@ -88,7 +82,7 @@ export async function downloadSchematic(req: Request): Promise<Response> {
         error: 'Failed to generate schematic file',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -112,10 +106,7 @@ export async function downloadGerbers(req: Request): Promise<Response> {
     }
 
     if (!circuit || !Array.isArray(circuit)) {
-      return Response.json(
-        { error: 'Circuit JSON is required' },
-        { status: 400 }
-      )
+      return Response.json({ error: 'Circuit JSON is required' }, { status: 400 })
     }
 
     // Convert to KiCad
@@ -147,7 +138,7 @@ export async function downloadGerbers(req: Request): Promise<Response> {
         error: 'Failed to generate Gerber files',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -171,10 +162,7 @@ export async function downloadBomFile(req: Request): Promise<Response> {
     }
 
     if (!circuit || !Array.isArray(circuit)) {
-      return Response.json(
-        { error: 'Circuit JSON is required' },
-        { status: 400 }
-      )
+      return Response.json({ error: 'Circuit JSON is required' }, { status: 400 })
     }
 
     // Convert to KiCad
@@ -206,7 +194,7 @@ export async function downloadBomFile(req: Request): Promise<Response> {
         error: 'Failed to generate BOM',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

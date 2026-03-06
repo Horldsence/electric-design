@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
+import type { AnyCircuitElement } from 'circuit-json'
+import type React from 'react'
+import { useState } from 'react'
 import useSocket from '../hooks/use-socket'
 import { LogViewer } from './LogViewer'
 import { SchematicViewer } from './SchematicViewer'
@@ -8,11 +10,10 @@ export function ConsoleInterface() {
   const [prompt, setPrompt] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [generatedCode, setGeneratedCode] = useState<string | null>(null)
-  const [circuitJson, setCircuitJson] = useState<any[] | null>(null)
+  const [circuitJson, setCircuitJson] = useState<AnyCircuitElement[] | null>(null)
   const [pcbSvg, setPcbSvg] = useState<string | null>(null)
   const [schematicSvg, setSchematicSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [downloadUrls, setDownloadUrls] = useState<{ kicad?: string; gerber?: string; bom?: string }>({})
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,7 +25,6 @@ export function ConsoleInterface() {
     setCircuitJson(null)
     setPcbSvg(null)
     setSchematicSvg(null)
-    setDownloadUrls({})
 
     try {
       // 1. Generate Code
@@ -33,12 +33,12 @@ export function ConsoleInterface() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       })
-      
+
       if (!genRes.ok) throw new Error('Generation failed')
-      
+
       const genData = await genRes.json()
       if (!genData.success) throw new Error(genData.error?.message || 'Generation failed')
-      
+
       const code = genData.data.code
       setGeneratedCode(code)
 
@@ -55,7 +55,7 @@ export function ConsoleInterface() {
         if (compileData.success && compileData.data) {
           // Save circuitJson for later use in downloads
           setCircuitJson(compileData.data.circuitJson)
-          
+
           // Set both PCB and schematic SVGs
           if (compileData.data.pcbSvg) {
             setPcbSvg(compileData.data.pcbSvg)
@@ -65,7 +65,6 @@ export function ConsoleInterface() {
           }
         }
       }
-
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
     } finally {
@@ -81,7 +80,7 @@ export function ConsoleInterface() {
 
     try {
       let endpoint = ''
-      
+
       switch (type) {
         case 'kicad':
           endpoint = '/api/download-kicad'
@@ -108,10 +107,10 @@ export function ConsoleInterface() {
       // Get the filename from Content-Disposition header or use default
       const contentDisposition = res.headers.get('Content-Disposition')
       let filename = `design_${type}.txt`
-      
+
       if (contentDisposition) {
         const matches = /filename="([^"]+)"/.exec(contentDisposition)
-        if (matches && matches[1]) {
+        if (matches?.[1]) {
           filename = matches[1]
         }
       }
@@ -151,7 +150,7 @@ export function ConsoleInterface() {
               <textarea
                 id="prompt"
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={e => setPrompt(e.target.value)}
                 placeholder="例如：一个由9V电池供电的555定时器电路，以1Hz频率闪烁LED..."
                 disabled={isProcessing}
                 className="prompt-input"
@@ -182,13 +181,26 @@ export function ConsoleInterface() {
             </div>
             {error ? (
               <div className="error-message-box">
-                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ marginBottom: '12px' }}>
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 48 48"
+                  fill="none"
+                  style={{ marginBottom: '12px' }}
+                >
+                  <title>错误提示</title>
                   <circle cx="24" cy="24" r="20" stroke="#f48771" strokeWidth="2" fill="none" />
-                  <path d="M24 16v12M24 32v2" stroke="#f48771" strokeWidth="2.5" strokeLinecap="round" />
+                  <path
+                    d="M24 16v12M24 32v2"
+                    stroke="#f48771"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
                 </svg>
                 <div>{error}</div>
-                <button 
-                  onClick={() => setError(null)} 
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
                   className="error-dismiss-btn"
                   style={{ marginTop: '12px' }}
                 >
@@ -197,15 +209,14 @@ export function ConsoleInterface() {
               </div>
             ) : isProcessing ? (
               <div className="processing-message">
-                <div className="spinner"></div>
+                <div className="spinner" />
                 <p>正在生成电路设计...</p>
                 <p className="processing-hint">正在编译代码并生成预览图</p>
               </div>
             ) : (
-              <SchematicViewer 
+              <SchematicViewer
                 pcbSvg={pcbSvg}
                 schematicSvg={schematicSvg}
-                circuitJson={circuitJson}
                 className="schematic-viewer-component"
               />
             )}
@@ -213,18 +224,30 @@ export function ConsoleInterface() {
 
           {generatedCode && (
             <div className="actions-section">
-                <div className="section-title">导出文件</div>
-                <div className="button-group">
-                    <button onClick={() => handleDownload('kicad')} className="action-btn">
-                        下载 KiCad PCB
-                    </button>
-                    <button onClick={() => handleDownload('gerber')} className="action-btn secondary">
-                        下载 Gerber 文件
-                    </button>
-                    <button onClick={() => handleDownload('bom')} className="action-btn secondary">
-                        下载物料清单
-                    </button>
-                </div>
+              <div className="section-title">导出文件</div>
+              <div className="button-group">
+                <button
+                  type="button"
+                  onClick={() => handleDownload('kicad')}
+                  className="action-btn"
+                >
+                  下载 KiCad PCB
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('gerber')}
+                  className="action-btn secondary"
+                >
+                  下载 Gerber 文件
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('bom')}
+                  className="action-btn secondary"
+                >
+                  下载物料清单
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { runTscircuitCode } from '@tscircuit/eval'
+import type { AnyCircuitElement } from 'circuit-json'
 
 const rcFilterCode = `
 export default () => (
@@ -28,10 +29,10 @@ export default () => (
 `
 
 async function checkWarnings() {
-  const json = await runTscircuitCode(rcFilterCode)
+  const json = (await runTscircuitCode(rcFilterCode)) as AnyCircuitElement[]
 
-  const warnings = json.filter((e: any) => e.type === 'source_pin_missing_trace_warning')
-  const traces = json.filter((e: any) => e.type === 'source_trace')
+  const warnings = json.filter(e => e.type === 'source_pin_missing_trace_warning')
+  const traces = json.filter(e => e.type === 'source_trace')
 
   console.log('Circuit Elements:', json.length)
   console.log('Traces:', traces.length)
@@ -39,16 +40,22 @@ async function checkWarnings() {
 
   if (warnings.length > 0) {
     console.log('\n⚠️  Warnings found:')
-    warnings.forEach((w: any) => console.log('  -', w.message))
+    warnings.forEach(w => console.log('  -', 'message' in w ? w.message : 'Unknown warning'))
   } else {
     console.log('\n✅ No missing pin warnings! All pins are connected.')
   }
 
-  const ports = json.filter((e: any) => e.type === 'source_port')
+  const ports = json.filter(e => e.type === 'source_port')
   console.log('\nTotal Ports:', ports.length)
   console.log(
     'Connected Ports:',
-    new Set(traces.flatMap((t: any) => t.connected_source_port_ids || [])).size,
+    new Set(
+      traces.flatMap(t =>
+        'connected_source_port_ids' in t && Array.isArray(t.connected_source_port_ids)
+          ? t.connected_source_port_ids
+          : [],
+      ),
+    ).size,
   )
 }
 

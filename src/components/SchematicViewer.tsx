@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react'
+import type React from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 interface SchematicViewerProps {
   pcbSvg?: string | null
   schematicSvg?: string | null
-  circuitJson?: any[] | null
   className?: string
 }
 
@@ -12,7 +12,6 @@ type ViewMode = 'pcb' | 'schematic'
 export const SchematicViewer: React.FC<SchematicViewerProps> = ({
   pcbSvg,
   schematicSvg,
-  circuitJson,
   className,
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('pcb')
@@ -44,18 +43,34 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // Reset view when content changes
+  const currentSvg = viewMode === 'pcb' ? pcbSvg : schematicSvg
+  const currentSvgUrl = useMemo(() => {
+    if (!currentSvg) return null
+
+    const svgBlob = new Blob([currentSvg], { type: 'image/svg+xml;charset=utf-8' })
+    return URL.createObjectURL(svgBlob)
+  }, [currentSvg])
+
+  useEffect(() => {
+    return () => {
+      if (currentSvgUrl) {
+        URL.revokeObjectURL(currentSvgUrl)
+      }
+    }
+  }, [currentSvgUrl])
+
+  // Reset view when displayed content changes
   useEffect(() => {
     setScale(1)
     setPosition({ x: 0, y: 0 })
-  }, [pcbSvg, schematicSvg, viewMode])
+  }, [])
 
   const handleZoomIn = () => {
-    setScale((prev) => Math.min(prev * 1.2, 5))
+    setScale(prev => Math.min(prev * 1.2, 5))
   }
 
   const handleZoomOut = () => {
-    setScale((prev) => Math.max(prev / 1.2, 0.1))
+    setScale(prev => Math.max(prev / 1.2, 0.1))
   }
 
   const handleResetView = () => {
@@ -91,11 +106,6 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
     setIsDragging(false)
   }
 
-  const handleWheel = (e: React.WheelEvent) => {
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    setScale((prev) => Math.max(0.1, Math.min(5, prev * delta)))
-  }
-
   // Add wheel event listener with { passive: false } to allow preventDefault
   useEffect(() => {
     const container = containerRef.current
@@ -104,7 +114,7 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
     const handleWheelEvent = (e: WheelEvent) => {
       e.preventDefault()
       const delta = e.deltaY > 0 ? 0.9 : 1.1
-      setScale((prev) => Math.max(0.1, Math.min(5, prev * delta)))
+      setScale(prev => Math.max(0.1, Math.min(5, prev * delta)))
     }
 
     container.addEventListener('wheel', handleWheelEvent, { passive: false })
@@ -114,30 +124,29 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
   }, [])
 
   const renderContent = () => {
-    // Choose which SVG to display based on view mode
-    const currentSvg = viewMode === 'pcb' ? pcbSvg : schematicSvg
-    
-    if (!currentSvg) {
+    if (!currentSvgUrl) {
       const isSchematicMissing = viewMode === 'schematic' && pcbSvg && !schematicSvg
       const isPcbMissing = viewMode === 'pcb' && !pcbSvg
-      
+
       return (
         <div className="placeholder-content">
-          <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+          <svg
+            width="120"
+            height="120"
+            viewBox="0 0 120 120"
+            fill="none"
+            role="img"
+            aria-label="电路预览占位图"
+          >
             <circle cx="60" cy="60" r="50" stroke="#333" strokeWidth="2" strokeDasharray="4 4" />
-            <path
-              d="M40 60h40M60 40v40"
-              stroke="#333"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
+            <path d="M40 60h40M60 40v40" stroke="#333" strokeWidth="2" strokeLinecap="round" />
           </svg>
           <p className="placeholder-text">
-            {isSchematicMissing 
-              ? '原理图视图暂不可用' 
+            {isSchematicMissing
+              ? '原理图视图暂不可用'
               : isPcbMissing
-              ? 'PCB视图暂不可用'
-              : '准备就绪，可以开始生成电路设计'}
+                ? 'PCB视图暂不可用'
+                : '准备就绪，可以开始生成电路设计'}
           </p>
           {isSchematicMissing && (
             <p className="placeholder-hint">
@@ -156,8 +165,13 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
           transformOrigin: 'center center',
           transition: isDragging ? 'none' : 'transform 0.1s ease-out',
         }}
-        dangerouslySetInnerHTML={{ __html: currentSvg }}
-      />
+      >
+        <img
+          src={currentSvgUrl}
+          alt={viewMode === 'pcb' ? 'PCB 预览' : '原理图预览'}
+          draggable={false}
+        />
+      </div>
     )
   }
 
@@ -168,12 +182,20 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
         {/* View Mode Toggle */}
         <div className="view-mode-toggle">
           <button
+            type="button"
             className={`mode-btn ${viewMode === 'pcb' ? 'active' : ''}`}
             onClick={() => setViewMode('pcb')}
             title={pcbSvg ? 'PCB视图' : 'PCB视图不可用'}
             disabled={!pcbSvg}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              role="img"
+              aria-label="PCB视图图标"
+            >
               <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" fill="none" />
               <circle cx="5" cy="5" r="1.5" />
               <circle cx="11" cy="5" r="1.5" />
@@ -183,37 +205,84 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
             <span>PCB</span>
           </button>
           <button
+            type="button"
             className={`mode-btn ${viewMode === 'schematic' ? 'active' : ''}`}
             onClick={() => setViewMode('schematic')}
             title={schematicSvg ? '原理图视图' : '原理图视图不可用'}
             disabled={!schematicSvg}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 8h4M10 8h4M8 2v4M8 10v4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              role="img"
+              aria-label="原理图视图图标"
+            >
+              <path
+                d="M2 8h4M10 8h4M8 2v4M8 10v4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                fill="none"
+              />
               <circle cx="8" cy="8" r="2" stroke="currentColor" fill="none" />
             </svg>
             <span>原理图</span>
-            {!schematicSvg && pcbSvg && (
-              <span className="unavailable-badge">N/A</span>
-            )}
+            {!schematicSvg && pcbSvg && <span className="unavailable-badge">N/A</span>}
           </button>
         </div>
 
         {/* Zoom Controls */}
         <div className="zoom-controls">
-          <button onClick={handleZoomOut} className="control-btn" title="缩小 (Ctrl + -)">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="control-btn"
+            title="缩小 (Ctrl + -)"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              role="img"
+              aria-label="缩小图标"
+            >
               <path d="M4 8h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
           <span className="zoom-level">{Math.round(scale * 100)}%</span>
-          <button onClick={handleZoomIn} className="control-btn" title="放大 (Ctrl + +)">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="control-btn"
+            title="放大 (Ctrl + +)"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              role="img"
+              aria-label="放大图标"
+            >
               <path d="M8 4v8M4 8h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          <button onClick={handleResetView} className="control-btn" title="重置视图 (Ctrl + 0)">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <button
+            type="button"
+            onClick={handleResetView}
+            className="control-btn"
+            title="重置视图 (Ctrl + 0)"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              role="img"
+              aria-label="重置视图图标"
+            >
               <path
                 d="M8 2v3M2 8h3M8 11v3M11 8h3"
                 stroke="currentColor"
@@ -409,11 +478,14 @@ export const SchematicViewer: React.FC<SchematicViewerProps> = ({
           will-change: transform;
         }
 
-        .svg-content svg {
+        .svg-content img {
           display: block;
           max-width: none;
           max-height: none;
           filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+          user-select: none;
+          -webkit-user-drag: none;
+          pointer-events: none;
         }
 
         .placeholder-content {

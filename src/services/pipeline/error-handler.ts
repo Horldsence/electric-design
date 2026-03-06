@@ -38,3 +38,20 @@ export class ConversionError extends Error {
     this.name = 'ConversionError'
   }
 }
+
+export class KiCadValidationError extends Error {
+  constructor(
+    message: string,
+    public checkType: 'erc' | 'drc',
+    public violations: Array<{
+      type: string
+      description: string
+      severity: 'error' | 'warning'
+      position?: { x: string; y: string }
+      items?: Array<{ kind: string; reference?: string; pad_number?: string; net?: string }>
+    }>,
+  ) {
+    super(message)
+    this.name = 'KiCadValidationError'
+  }
+}

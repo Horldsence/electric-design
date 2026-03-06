@@ -6,6 +6,13 @@ import { POST as compileAndConvertPost } from './routes/compile-and-convert'
 import { POST as convertPost } from './routes/convert'
 import { POST as exportPost } from './routes/export'
 import { POST as generatePost } from './routes/generate'
+import {
+  autoFixValidation,
+  checkKiCad,
+  exportBom,
+  exportGerber,
+  validateKiCad,
+} from './routes/validate-kicad'
 
 const _config = getConfig()
 
@@ -53,6 +60,26 @@ const server = serve({
 
     '/api/compile-and-convert': {
       POST: compileAndConvertPost,
+    },
+
+    '/api/validate-kicad': {
+      POST: validateKiCad,
+    },
+
+    '/api/check-kicad': {
+      POST: checkKiCad,
+    },
+
+    '/api/export-gerber': {
+      POST: exportGerber,
+    },
+
+    '/api/export-bom': {
+      POST: exportBom,
+    },
+
+    '/api/auto-fix-validation': {
+      POST: autoFixValidation,
     },
   },
 

@@ -11,10 +11,12 @@ type TscircuitCheckError = {
 export async function validateCircuit(circuitJson: unknown[]): Promise<ValidationResult> {
   try {
     const errors = await runAllChecks(circuitJson as TscircuitCheckError[])
+    const connectionErrors = detectUnconnectedComponents(circuitJson)
+    const allErrors = [...errors, ...connectionErrors]
 
     return {
-      isValid: errors.length === 0,
-      errors: errors.map(
+      isValid: allErrors.length === 0,
+      errors: allErrors.map(
         (e: TscircuitCheckError): ValidationError => ({
           type: e.error_type || e.type || 'validation_error',
           message: e.message,
@@ -35,4 +37,34 @@ export async function validateCircuit(circuitJson: unknown[]): Promise<Validatio
       ],
     }
   }
+}
+
+/**
+ * Detect components that have no trace connections
+ */
+function detectUnconnectedComponents(circuitJson: unknown[]): TscircuitCheckError[] {
+  const errors: TscircuitCheckError[] = []
+
+  type CircuitElement = {
+    type?: string
+  }
+
+  const componentCount = circuitJson.filter(
+    (e: unknown) =>
+      (e as CircuitElement)?.type === 'source_component' ||
+      (e as CircuitElement)?.type?.includes('component'),
+  ).length
+
+  const traceCount = circuitJson.filter(
+    (e: unknown) => (e as CircuitElement)?.type === 'source_trace',
+  ).length
+
+  if (componentCount > 0 && traceCount === 0) {
+    errors.push({
+      type: 'unconnected_components',
+      message: `Circuit has ${componentCount} component(s) but no trace connections. All component pins must be connected with <trace> elements.`,
+    })
+  }
+
+  return errors
 }

@@ -1,9 +1,9 @@
-import { generateCode } from "../ai/code-generator"
-import { compilerService } from "../tscircuit/compiler"
-import { validateCircuit } from "../tscircuit/validator"
-import { convertToKiCad } from "../kicad/converter"
-import { postProcess } from "../kicad/validator"
-import { createPipelineLogger } from "../../lib/debug"
+import { createPipelineLogger } from '../../lib/debug'
+import { generateCode } from '../ai/code-generator'
+import { convertToKiCad } from '../kicad/converter'
+import { postProcess } from '../kicad/validator'
+import { compilerService } from '../tscircuit/compiler'
+import { validateCircuit } from '../tscircuit/validator'
 
 type PipelineResult = {
   success: boolean
@@ -22,71 +22,72 @@ type PipelineResult = {
 
 export async function runPipeline(
   userPrompt: string,
-  options = { runErc: false, runDrc: false, generateGerber: false }
+  options = { runErc: false, runDrc: false, generateGerber: false },
 ): Promise<PipelineResult> {
   const sessionId = `session_${Date.now()}`
-  const log = createPipelineLogger("pipeline", sessionId)
+  const log = createPipelineLogger('pipeline', sessionId)
 
   try {
-    log.info("Pipeline started", { promptLength: userPrompt.length })
+    log.info('Pipeline started', { promptLength: userPrompt.length })
 
-    const aiStage = log.stage("ai-generation")
-    const generationResult = await aiStage.measure("generate-code", async () => {
+    const aiStage = log.stage('ai-generation')
+    const generationResult = await aiStage.measure('generate-code', async () => {
       const result = await generateCode(userPrompt)
-      aiStage.debug("Code generated", { codeLength: result.code.length })
+      aiStage.debug('Code generated', { codeLength: result.code.length })
       return result
     })
 
-    const compileStage = log.stage("compile")
-    const { circuitJson, logs, errors: compileErrors } =
-      await compilerService.compile(sessionId, generationResult.code)
+    const _compileStage = log.stage('compile')
+    const {
+      circuitJson,
+      logs,
+      errors: compileErrors,
+    } = await compilerService.compile(sessionId, generationResult.code)
 
     if (compileErrors && compileErrors.length > 0) {
       compilerService.cleanup(sessionId)
-      log.error("Compilation failed", { errors: compileErrors })
+      log.error('Compilation failed', { errors: compileErrors })
       return {
         success: false,
         error: {
-          type: "compilation_failed",
-          message: "Failed to compile tscircuit code",
-          details: { logs, errors: compileErrors }
-        }
+          type: 'compilation_failed',
+          message: 'Failed to compile tscircuit code',
+          details: { logs, errors: compileErrors },
+        },
       }
     }
 
-    const validationStage = log.stage("validation")
+    const validationStage = log.stage('validation')
     const validation = await validateCircuit(circuitJson)
 
     if (!validation.isValid) {
       compilerService.cleanup(sessionId)
-      log.error("Validation failed", { errors: validation.errors })
+      log.error('Validation failed', { errors: validation.errors })
       return {
         success: false,
         error: {
-          type: "validation_failed",
-          message: "Circuit validation failed",
-          details: { errors: validation.errors }
-        }
+          type: 'validation_failed',
+          message: 'Circuit validation failed',
+          details: { errors: validation.errors },
+        },
       }
     }
 
-    validationStage.info("Validation passed", { errorCount: validation.errors.length })
+    validationStage.info('Validation passed', { errorCount: validation.errors.length })
 
-    const convertStage = log.stage("convert")
+    const convertStage = log.stage('convert')
     const kicadFiles = convertToKiCad(circuitJson)
 
-    convertStage.info("Conversion complete", {
+    convertStage.info('Conversion complete', {
       pcbSize: kicadFiles.pcb.length,
-      schSize: kicadFiles.sch.length
+      schSize: kicadFiles.sch.length,
     })
 
     compilerService.cleanup(sessionId)
 
-    const artifacts = options ?
-      await postProcess(kicadFiles, options) :
-      undefined
+    const artifacts = options ? await postProcess(kicadFiles, options) : undefined
 
-    log.info("Pipeline completed successfully")
+    log.info('Pipeline completed successfully')
 
     return {
       success: true,
@@ -94,18 +95,18 @@ export async function runPipeline(
         circuitJson,
         kicadFiles,
         validation,
-        artifacts
-      }
+        artifacts,
+      },
     }
   } catch (error) {
-    log.error("Pipeline error", error)
+    log.error('Pipeline error', error)
     return {
       success: false,
       error: {
-        type: "pipeline_error",
-        message: error instanceof Error ? error.message : "Unknown error",
-        details: error
-      }
+        type: 'pipeline_error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        details: error,
+      },
     }
   }
 }

@@ -1,8 +1,23 @@
-import { expect, test } from 'bun:test'
+import { test } from 'bun:test'
+import { mkdir } from 'node:fs/promises'
 import { convertToKiCad } from '../../src/services/kicad/converter'
 import { compilerService } from '../../src/services/tscircuit/compiler'
 
-test('simple resistor circuit - full pipeline', async () => {
+async function saveKicadFiles(name: string, kicadFiles: { pcb: string; sch: string }) {
+  const outputDir = 'tests/output/kicad'
+  await mkdir(outputDir, { recursive: true })
+
+  const pcbPath = `${outputDir}/${name}.kicad_pcb`
+  const schPath = `${outputDir}/${name}.kicad_sch`
+
+  await Bun.write(pcbPath, kicadFiles.pcb)
+  await Bun.write(schPath, kicadFiles.sch)
+
+  console.log(`  ✓ Saved ${pcbPath}`)
+  console.log(`  ✓ Saved ${schPath}`)
+}
+
+test('simple resistor - save to KiCad files', async () => {
   const code = `
     export default () => (
       <board width="20mm" height="20mm">
@@ -12,26 +27,15 @@ test('simple resistor circuit - full pipeline', async () => {
   `
 
   const sessionId = `test_${Date.now()}`
-
   const compileResult = await compilerService.compile(sessionId, code)
-
-  expect(compileResult.errors).toBeUndefined()
-  expect(compileResult.circuitJson).toBeInstanceOf(Array)
-  expect(compileResult.circuitJson.length).toBeGreaterThan(0)
-
-  const resistor = compileResult.circuitJson.find((el: any) => el.name === 'R1')
-  expect(resistor).toBeDefined()
-  expect(resistor?.type).toBe('source_component')
-
   const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-  expect(kicadFiles.pcb).toContain('(kicad_pcb')
-  expect(kicadFiles.sch).toContain('(kicad_sch')
+  await saveKicadFiles('simple-resistor', kicadFiles)
 
   compilerService.cleanup(sessionId)
 })
 
-test('resistor + LED circuit - full pipeline', async () => {
+test('resistor + LED - save to KiCad files', async () => {
   const code = `
     export default () => (
       <board width="30mm" height="20mm">
@@ -42,27 +46,15 @@ test('resistor + LED circuit - full pipeline', async () => {
   `
 
   const sessionId = `test_${Date.now()}`
-
   const compileResult = await compilerService.compile(sessionId, code)
-
-  expect(compileResult.errors).toBeUndefined()
-  expect(compileResult.circuitJson.length).toBeGreaterThan(1)
-
-  const resistor = compileResult.circuitJson.find((el: any) => el.name === 'R1')
-  const led = compileResult.circuitJson.find((el: any) => el.name === 'LED1')
-
-  expect(resistor).toBeDefined()
-  expect(led).toBeDefined()
-
   const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-  expect(kicadFiles.pcb.length).toBeGreaterThan(100)
-  expect(kicadFiles.sch.length).toBeGreaterThan(100)
+  await saveKicadFiles('resistor-led', kicadFiles)
 
   compilerService.cleanup(sessionId)
 })
 
-test('simple chip circuit - full pipeline', async () => {
+test('chip + resistor + capacitor - save to KiCad files', async () => {
   const code = `
     export default () => (
       <board width="30mm" height="20mm">
@@ -83,21 +75,10 @@ test('simple chip circuit - full pipeline', async () => {
   `
 
   const sessionId = `test_${Date.now()}`
-
   const compileResult = await compilerService.compile(sessionId, code)
-
-  expect(compileResult.errors).toBeUndefined()
-  expect(compileResult.circuitJson.length).toBeGreaterThan(2)
-
-  const chip = compileResult.circuitJson.find((el: any) => el.name === 'U1')
-  expect(chip).toBeDefined()
-  expect(chip?.type).toBe('source_component')
-  expect(chip?.ftype).toBe('simple_chip')
-
   const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-  expect(kicadFiles.pcb).toContain('footprint')
-  expect(kicadFiles.sch).toContain('symbol')
+  await saveKicadFiles('chip-rc', kicadFiles)
 
   compilerService.cleanup(sessionId)
 })

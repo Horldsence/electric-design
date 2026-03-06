@@ -17,7 +17,7 @@ export type AIGenerationResult = {
  */
 export type AIGenerationError = {
   message: string
-  type: "api_error" | "rate_limit" | "invalid_response"
+  type: 'api_error' | 'rate_limit' | 'invalid_response'
   retryable: boolean
 }
 
@@ -43,7 +43,7 @@ export type PromptExample = {
 /**
  * AI 提供商类型
  */
-export type AIProvider = "openai" | "anthropic"
+export type AIProvider = 'openai' | 'anthropic'
 
 /**
  * AI 配置

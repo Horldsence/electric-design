@@ -1,12 +1,4 @@
 /**
- * tscircuit Circuit JSON 类型定义
- *
- * 基于官方文档: https://docs.tscircuit.com/api-reference/advanced/soup
- */
-
-import type { ZodType } from "zod"
-
-/**
  * Circuit JSON 元素基础类型
  */
 export type AnyCircuitElement = {
@@ -18,8 +10,8 @@ export type AnyCircuitElement = {
  * 源组件 - 电路设计的逻辑定义
  */
 export type SourceComponent = {
-  type: "source_component"
-  ftype: string  // 例如: "simple_resistor", "led"
+  type: 'source_component'
+  ftype: string // 例如: "simple_resistor", "led"
   source_component_id: string
   name: string
   [props: string]: unknown
@@ -29,7 +21,7 @@ export type SourceComponent = {
  * 原理图组件 - 原理图中的实例
  */
 export type SchematicComponent = {
-  type: "schematic_component"
+  type: 'schematic_component'
   schematic_component_id: string
   source_component_id: string
   center: { x: string; y: string }
@@ -41,11 +33,11 @@ export type SchematicComponent = {
  * PCB组件 - PCB上的实例
  */
 export type PcbComponent = {
-  type: "pcb_component"
+  type: 'pcb_component'
   pcb_component_id: string
   source_component_id: string
   center: { x: string; y: string }
-  layer: "top" | "bottom"
+  layer: 'top' | 'bottom'
   rotation?: number
   footprint?: string
 }
@@ -54,11 +46,11 @@ export type PcbComponent = {
  * PCB走线 - 铜线路径
  */
 export type PcbTrace = {
-  type: "pcb_trace"
+  type: 'pcb_trace'
   pcb_trace_id: string
   source_trace_id: string
   route: Array<{
-    route_type: "wire"
+    route_type: 'wire'
     x: string
     y: string
     width: string
@@ -69,7 +61,7 @@ export type PcbTrace = {
  * 源走线 - 逻辑连接
  */
 export type SourceTrace = {
-  type: "source_trace"
+  type: 'source_trace'
   source_trace_id: string
   name?: string
   from: { port_id: string }
@@ -80,7 +72,7 @@ export type SourceTrace = {
  * 端口 - 组件的连接点
  */
 export type Port = {
-  type: "port"
+  type: 'port'
   port_id: string
   source_component_id: string
   name: string
@@ -90,15 +82,15 @@ export type Port = {
  * 网络标签 - 电源和地
  */
 export type Net = {
-  type: "net"
-  name: string  // 例如: "VCC", "GND"
+  type: 'net'
+  name: string // 例如: "VCC", "GND"
 }
 
 /**
  * 电路板定义
  */
 export type Board = {
-  type: "board"
+  type: 'board'
   board_id: string
   width: string
   height: string
@@ -140,5 +132,5 @@ export type ValidationError = {
   type: string
   message: string
   circuit_element_id?: string
-  severity: "error" | "warning"
+  severity: 'error' | 'warning'
 }

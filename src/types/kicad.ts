@@ -6,9 +6,9 @@
  * KiCad 工程文件集合
  */
 export type KicadFiles = {
-  sch: string    // 原理图文件 (.kicad_sch)
-  pcb: string    // PCB文件 (.kicad_pcb)
-  pro?: string   // 工程文件 (.kicad_pro)
+  sch: string // 原理图文件 (.kicad_sch)
+  pcb: string // PCB文件 (.kicad_pcb)
+  pro?: string // 工程文件 (.kicad_pro)
 }
 
 /**
@@ -68,7 +68,7 @@ export type DrcError = {
  * Gerber 文件集合
  */
 export type GerberFiles = {
-  [layer: string]: string  // 例如: { "F.Cu": "...", "B.Cu": "..." }
+  [layer: string]: string // 例如: { "F.Cu": "...", "B.Cu": "..." }
 }
 
 /**

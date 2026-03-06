@@ -1,4 +1,4 @@
-import { logger } from "./logger"
+import { logger } from './logger'
 
 type DebugContext = {
   pipeline?: string
@@ -10,40 +10,32 @@ type DebugContext = {
 export function debugContext(base: DebugContext) {
   return {
     debug(message: string, data?: unknown) {
-      const context = base.stage ?
-        `${base.pipeline}:${base.stage}` :
-        base.pipeline || "system"
+      const context = base.stage ? `${base.pipeline}:${base.stage}` : base.pipeline || 'system'
       logger.debug(context, message, { ...base, ...data })
     },
 
     info(message: string, data?: unknown) {
-      const context = base.stage ?
-        `${base.pipeline}:${base.stage}` :
-        base.pipeline || "system"
+      const context = base.stage ? `${base.pipeline}:${base.stage}` : base.pipeline || 'system'
       logger.info(context, message, { ...base, ...data })
     },
 
     warn(message: string, data?: unknown) {
-      const context = base.stage ?
-        `${base.pipeline}:${base.stage}` :
-        base.pipeline || "system"
+      const context = base.stage ? `${base.pipeline}:${base.stage}` : base.pipeline || 'system'
       logger.warn(context, message, { ...base, ...data })
     },
 
     error(message: string, error?: Error | unknown) {
-      const context = base.stage ?
-        `${base.pipeline}:${base.stage}` :
-        base.pipeline || "system"
+      const context = base.stage ? `${base.pipeline}:${base.stage}` : base.pipeline || 'system'
       logger.error(context, message, error)
     },
 
     measure<T>(operation: string, fn: () => Promise<T> | T): Promise<T> | T {
       return logger.measure(
-        base.stage ? `${base.pipeline}:${base.stage}` : base.pipeline || "system",
+        base.stage ? `${base.pipeline}:${base.stage}` : base.pipeline || 'system',
         operation,
-        fn
+        fn,
       )
-    }
+    },
   }
 }
 
@@ -53,7 +45,7 @@ export function createPipelineLogger(pipeline: string, sessionId: string) {
       return debugContext({
         pipeline,
         sessionId,
-        stage: stageName
+        stage: stageName,
       })
     },
 
@@ -71,6 +63,6 @@ export function createPipelineLogger(pipeline: string, sessionId: string) {
 
     error(message: string, error?: Error | unknown) {
       logger.error(`${pipeline}:${sessionId}`, message, error)
-    }
+    },
   }
 }

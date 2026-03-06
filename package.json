@@ -6,7 +6,17 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
-    "start": "NODE_ENV=production bun src/index.ts"
+    "start": "NODE_ENV=production bun src/index.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "lint": "bun run lint:ts && bun run lint:css",
+    "lint:ts": "bunx biome check src/ tests/",
+    "lint:css": "bunx stylelint 'src/**/*.css' --config .stylelintrc.json",
+    "lint:fix": "bunx biome check --write src/ tests/ && bunx stylelint --fix 'src/**/*.css'",
+    "format": "bunx biome format --write src/ tests/",
+    "format:check": "bunx biome format --check src/ tests/",
+    "type-check": "bun run tsc --noEmit"
   },
   "dependencies": {
     "react": "^19.2.4",
@@ -22,6 +32,10 @@
   "devDependencies": {
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@biomejs/biome": "^1.9.4",
+    "stylelint": "^16.14.1",
+    "stylelint-config-standard": "^36.0.1",
+    "typescript": "^5.8.3"
   }
 }

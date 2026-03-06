@@ -26,9 +26,16 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
+.bun-cache
 
 # IntelliJ based IDEs
 .idea
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# pre-commit
+.pre-commit-config.yaml
+
+# test outputs
+tests/output/

@@ -1,19 +1,22 @@
-import { compilerService } from "../services/tscircuit/compiler"
-import { validateCircuit } from "../services/tscircuit/validator"
+import { compilerService } from '../services/tscircuit/compiler'
+import { validateCircuit } from '../services/tscircuit/validator'
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     const { code } = body
 
-    if (!code || typeof code !== "string") {
-      return Response.json({
-        success: false,
-        error: {
-          type: "invalid_request",
-          message: "Code is required and must be a string"
-        }
-      }, { status: 400 })
+    if (!code || typeof code !== 'string') {
+      return Response.json(
+        {
+          success: false,
+          error: {
+            type: 'invalid_request',
+            message: 'Code is required and must be a string',
+          },
+        },
+        { status: 400 },
+      )
     }
 
     const sessionId = `compile_${Date.now()}`
@@ -28,16 +31,19 @@ export async function POST(req: Request) {
       data: {
         circuitJson: result.circuitJson,
         logs: result.logs,
-        validation
-      }
+        validation,
+      },
     })
   } catch (error) {
-    return Response.json({
-      success: false,
-      error: {
-        type: "compilation_error",
-        message: error instanceof Error ? error.message : "Unknown error"
-      }
-    }, { status: 500 })
+    return Response.json(
+      {
+        success: false,
+        error: {
+          type: 'compilation_error',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      },
+      { status: 500 },
+    )
   }
 }

@@ -1,5 +1,5 @@
-import { createPipelineLogger } from "../../lib/debug"
-import type { AIGenerationResult, PromptConfig } from "../../types/ai"
+import { createPipelineLogger } from '../../lib/debug'
+import type { AIGenerationResult, PromptConfig } from '../../types/ai'
 
 const FALLBACK_CODE = `
 export default () => (
@@ -14,7 +14,7 @@ export default () => (
 `
 
 const PROMPT_CONFIG: PromptConfig = {
-  systemPrompt: "You are an expert electronic circuit designer specializing in tscircuit.",
+  systemPrompt: 'You are an expert electronic circuit designer specializing in tscircuit.',
   userPromptTemplate: `Create a tscircuit circuit based on this requirement: {prompt}
 
 Requirements:
@@ -25,31 +25,28 @@ Requirements:
 - Return ONLY the code, no explanation`,
   examples: [],
   constraints: [
-    "Code must be valid TypeScript/JSX",
-    "All components require footprints",
-    "All connections must use traces",
-    "Return only code, no markdown blocks"
-  ]
+    'Code must be valid TypeScript/JSX',
+    'All components require footprints',
+    'All connections must use traces',
+    'Return only code, no markdown blocks',
+  ],
 }
 
-export async function generateCode(
-  userPrompt: string,
-  maxRetries = 3
-): AIGenerationResult {
-  const log = createPipelineLogger("ai-generation", `gen_${Date.now()}`)
+export async function generateCode(userPrompt: string, maxRetries = 3): AIGenerationResult {
+  const log = createPipelineLogger('ai-generation', `gen_${Date.now()}`)
   const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    log.warn("No API key found, using fallback code")
+    log.warn('No API key found, using fallback code')
     return {
       code: FALLBACK_CODE,
       success: true,
       retryCount: 0,
-      fallback: true
+      fallback: true,
     }
   }
 
-  log.info("Starting AI code generation", { promptLength: userPrompt.length, maxRetries })
+  log.info('Starting AI code generation', { promptLength: userPrompt.length, maxRetries })
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -57,57 +54,57 @@ export async function generateCode(
       const cleaned = extractCode(code)
 
       if (isValidTscircuitCode(cleaned)) {
-        log.info("Successfully generated code", { attempt, codeLength: cleaned.length })
+        log.info('Successfully generated code', { attempt, codeLength: cleaned.length })
         return {
           code: cleaned,
           success: true,
-          retryCount: attempt
+          retryCount: attempt,
         }
       }
 
-      log.debug("Generated code invalid, retrying", { attempt })
+      log.debug('Generated code invalid, retrying', { attempt })
     } catch (error) {
-      log.error("LLM call failed", error)
+      log.error('LLM call failed', error)
       if (attempt === maxRetries - 1) {
-        log.warn("All retries exhausted, using fallback")
+        log.warn('All retries exhausted, using fallback')
         return {
           code: FALLBACK_CODE,
           success: true,
           retryCount: maxRetries,
-          fallback: true
+          fallback: true,
         }
       }
     }
   }
 
-  log.warn("Failed to generate valid code, using fallback")
+  log.warn('Failed to generate valid code, using fallback')
   return {
     code: FALLBACK_CODE,
     success: true,
     retryCount: maxRetries,
-    fallback: true
+    fallback: true,
   }
 }
 
 async function callLLM(prompt: string, apiKey: string): string {
-  const isOpenAI = apiKey.startsWith("sk-")
+  const isOpenAI = apiKey.startsWith('sk-')
 
   if (isOpenAI) {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: 'gpt-4',
         messages: [
-          { role: "system", content: PROMPT_CONFIG.systemPrompt },
-          { role: "user", content: PROMPT_CONFIG.userPromptTemplate.replace("{prompt}", prompt) }
+          { role: 'system', content: PROMPT_CONFIG.systemPrompt },
+          { role: 'user', content: PROMPT_CONFIG.userPromptTemplate.replace('{prompt}', prompt) },
         ],
         temperature: 0.7,
-        max_tokens: 2000
-      })
+        max_tokens: 2000,
+      }),
     })
 
     if (!response.ok) {
@@ -116,33 +113,32 @@ async function callLLM(prompt: string, apiKey: string): string {
 
     const data = await response.json()
     return data.choices[0].message.content
-  } else {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-3-sonnet-20240229",
-        max_tokens: 2000,
-        messages: [
-          {
-            role: "user",
-            content: `${PROMPT_CONFIG.systemPrompt}\n\n${PROMPT_CONFIG.userPromptTemplate.replace("{prompt}", prompt)}`
-          }
-        ]
-      })
-    })
-
-    if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return data.content[0].text
   }
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-3-sonnet-20240229',
+      max_tokens: 2000,
+      messages: [
+        {
+          role: 'user',
+          content: `${PROMPT_CONFIG.systemPrompt}\n\n${PROMPT_CONFIG.userPromptTemplate.replace('{prompt}', prompt)}`,
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Anthropic API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  return data.content[0].text
 }
 
 function extractCode(raw: string): string {
@@ -154,7 +150,5 @@ function extractCode(raw: string): string {
 }
 
 function isValidTscircuitCode(code: string): boolean {
-  return code.includes("<board") &&
-         code.includes("export default") &&
-         code.includes(">")
+  return code.includes('<board') && code.includes('export default') && code.includes('>')
 }

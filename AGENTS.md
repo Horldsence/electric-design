@@ -7,6 +7,8 @@
 用户输入 (自然语言) → AI生成 (tscircuit代码) → 编译 (Circuit JSON) → 转换 (KiCad文件)
 ```
 
+**实际状态**: 核心服务层已实现 (ai/, tscircuit/, kicad/, pipeline/)，前端组件为空壳。完整路径见 `src/services/AGENTS.md` 和 `src/routes/AGENTS.md`。
+
 ## 核心哲学
 
 ### Linus式设计原则
@@ -612,3 +614,37 @@ test("full pipeline: prompt → KiCad files", async () => {
 ## 许可证
 
 MIT
+
+---
+
+## 项目状态 (2025-03-06)
+
+### 已实现 ✅
+- 核心服务层 (src/services/) - AI生成、tscircuit编译、验证、KiCad转换
+- Pipeline编排器 - 完整流程协调与错误处理
+- API路由 (src/routes/) - 4个端点 (export, compile, convert, compile-and-convert)
+- 日志系统 (src/lib/logger.ts, src/lib/debug.ts) - 结构化日志与性能测量
+- 集成测试 (tests/integration/) - 端到端pipeline测试
+
+### 缺失功能 ❌
+- 前端组件 (src/web/components/) - InputPanel, CodeViewer, ResultViewer 未实现
+- API客户端 (src/web/api/client.ts) - 前端API通信层
+- generate.ts 路由 - AI代码生成独立端点
+- 工具库 (src/lib/) - file-manager.ts, config.ts 缺失
+- 单元测试 (tests/unit/) 和 E2E测试 (tests/e2e/)
+
+### 架构偏差 ⚠️
+- React组件在 src/ 根目录而非 src/web/
+- 类型结构变化: ai.ts 替代了 pipeline.ts
+- 合并端点 compile-and-convert.ts 打破单一职责模式
+
+### 代码质量问题 🔧
+- DRY违规: kicad/validator.ts 中 ~120行 exec() 模式重复
+- DRY违规: API响应对象在4+路由中重复
+- 错误处理不一致: 自定义错误类已定义但服务返回错误对象而非抛出
+
+**行动优先级**:
+1. 实现 src/web/components/ 核心组件
+2. 提取 kicad/validator.ts 中重复的 exec() 模式
+3. 统一错误处理策略 (throw vs return)
+4. 决定: 保留 compile-and-convert.ts 或拆分为单一职责端点

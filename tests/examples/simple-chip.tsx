@@ -6,25 +6,13 @@ export default () => (
       schX={0}
       schY={0}
       pinLabels={{
-        pin1: "IN",
-        pin2: "OUT",
-        pin3: "EN",
-        pin4: "GND"
+        pin1: 'IN',
+        pin2: 'OUT',
+        pin3: 'EN',
+        pin4: 'GND',
       }}
     />
-    <resistor
-      name="R1"
-      resistance="10k"
-      footprint="0402"
-      schX={-3}
-      schY={1}
-    />
-    <capacitor
-      name="C1"
-      capacitance="1uF"
-      footprint="0402"
-      schX={-3}
-      schY={-1}
-    />
+    <resistor name="R1" resistance="10k" footprint="0402" schX={-3} schY={1} />
+    <capacitor name="C1" capacitance="1uF" footprint="0402" schX={-3} schY={-1} />
   </board>
 )

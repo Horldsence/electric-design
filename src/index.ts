@@ -13,12 +13,19 @@ import {
   exportGerber,
   validateKiCad,
 } from './routes/validate-kicad'
+import {
+  downloadKiCad,
+  downloadSchematic,
+  downloadGerbers,
+  downloadBomFile,
+} from './routes/download'
+import { socketManager, type WebSocketData } from './lib/socket-manager'
 
 const _config = getConfig()
 
-const server = serve({
+const server = serve<WebSocketData>({
   routes: {
-    '/*': index,
+    '/': index,
 
     '/api/hello': {
       async GET(_req) {
@@ -81,6 +88,43 @@ const server = serve({
     '/api/auto-fix-validation': {
       POST: autoFixValidation,
     },
+
+    '/api/download-kicad': {
+      POST: downloadKiCad,
+    },
+
+    '/api/download-schematic': {
+      POST: downloadSchematic,
+    },
+
+    '/api/download-gerbers': {
+      POST: downloadGerbers,
+    },
+
+    '/api/download-bom': {
+      POST: downloadBomFile,
+    },
+  },
+
+  fetch(req, server) {
+    const url = new URL(req.url)
+    if (url.pathname === '/ws') {
+      const success = server.upgrade(req, {
+        data: {
+          id: crypto.randomUUID(),
+          createdAt: Date.now(),
+        },
+      })
+      return success ? undefined : new Response('WebSocket upgrade failed', { status: 400 })
+    }
+
+    return new Response('Not found', { status: 404 })
+  },
+
+  websocket: {
+    message: (ws, message) => socketManager.handleMessage(ws, message),
+    open: (ws) => socketManager.handleOpen(ws),
+    close: (ws) => socketManager.handleClose(ws),
   },
 
   development: isDevelopment() && {

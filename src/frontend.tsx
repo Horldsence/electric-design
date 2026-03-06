@@ -9,6 +9,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 
+console.log('Frontend loaded')
+
 const elem = document.getElementById('root')
 
 if (!elem) {

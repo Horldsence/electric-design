@@ -1,6 +1,8 @@
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+import { getLogLevel, isProduction } from './config'
 
-type LogEntry = {
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+export type LogEntry = {
   level: LogLevel
   timestamp: number
   context: string
@@ -15,13 +17,23 @@ type LogEntry = {
   [key: string]: unknown
 }
 
+export type LogListener = (entry: LogEntry) => void
+
 class Logger {
   private minLevel: LogLevel
   private isProduction: boolean
+  private listeners: Set<LogListener> = new Set()
 
   constructor(minLevel: LogLevel = 'info', isProduction = false) {
     this.minLevel = minLevel
     this.isProduction = isProduction
+  }
+
+  onLog(listener: LogListener) {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -83,6 +95,15 @@ class Logger {
       case 'error':
         console.error(formatted)
         break
+    }
+
+    for (const listener of this.listeners) {
+      try {
+        listener(entry)
+      } catch (e) {
+        // Prevent listener errors from crashing the app
+        console.error('Error in log listener', e)
+      }
     }
   }
 
@@ -154,8 +175,6 @@ class Logger {
     return result
   }
 }
-
-import { getLogLevel, isProduction } from './config'
 
 const logLevel = getLogLevel()
 export const logger = new Logger(logLevel, isProduction())

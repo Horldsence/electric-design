@@ -1,5 +1,7 @@
 import { compilerService } from '../services/tscircuit/compiler'
 import { validateCircuit } from '../services/tscircuit/validator'
+// @ts-ignore
+import { convertCircuitJsonToPcbSvg } from 'circuit-to-svg'
 
 export async function POST(req: Request) {
   try {
@@ -25,6 +27,7 @@ export async function POST(req: Request) {
     compilerService.cleanup(sessionId)
 
     const validation = validateCircuit(result.circuitJson)
+    const svg = convertCircuitJsonToPcbSvg(result.circuitJson)
 
     return Response.json({
       success: true,
@@ -32,6 +35,7 @@ export async function POST(req: Request) {
         circuitJson: result.circuitJson,
         logs: result.logs,
         validation,
+        svg,
       },
     })
   } catch (error) {

@@ -1,0 +1,27 @@
+{
+  "name": "bun-react-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
+    "start": "NODE_ENV=production bun src/index.ts"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "@tscircuit/eval": "^0.0.692",
+    "@tscircuit/core": "^0.0.1090",
+    "@tscircuit/checks": "^0.0.104",
+    "circuit-json": "^0.0.391",
+    "circuit-json-to-kicad": "^0.0.83",
+    "kicad-converter": "^0.0.17",
+    "bun-match-svg": "^0.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/bun": "latest"
+  }
+}

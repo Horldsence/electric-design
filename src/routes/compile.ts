@@ -1,7 +1,7 @@
 import { compilerService } from '../services/tscircuit/compiler'
 import { validateCircuit } from '../services/tscircuit/validator'
 // @ts-ignore
-import { convertCircuitJsonToPcbSvg } from 'circuit-to-svg'
+import { convertCircuitJsonToPcbSvg, convertCircuitJsonToSchematicSvg } from 'circuit-to-svg'
 
 export async function POST(req: Request) {
   try {
@@ -27,7 +27,14 @@ export async function POST(req: Request) {
     compilerService.cleanup(sessionId)
 
     const validation = validateCircuit(result.circuitJson)
-    const svg = convertCircuitJsonToPcbSvg(result.circuitJson)
+    const pcbSvg = convertCircuitJsonToPcbSvg(result.circuitJson as any)
+    
+    let schematicSvg = null
+    try {
+      schematicSvg = convertCircuitJsonToSchematicSvg(result.circuitJson as any)
+    } catch (error) {
+      console.warn('Failed to generate schematic SVG:', error)
+    }
 
     return Response.json({
       success: true,
@@ -35,7 +42,9 @@ export async function POST(req: Request) {
         circuitJson: result.circuitJson,
         logs: result.logs,
         validation,
-        svg,
+        svg: pcbSvg, // PCB SVG for backward compatibility
+        pcbSvg,
+        schematicSvg,
       },
     })
   } catch (error) {

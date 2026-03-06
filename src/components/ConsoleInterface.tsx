@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react'
 import useSocket from '../hooks/use-socket'
 import { LogViewer } from './LogViewer'
+import { SchematicViewer } from './SchematicViewer'
 
 export function ConsoleInterface() {
-  const { logs, status } = useSocket()
+  const { logs, status, clearLogs } = useSocket()
   const [prompt, setPrompt] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [generatedCode, setGeneratedCode] = useState<string | null>(null)
   const [circuitJson, setCircuitJson] = useState<any[] | null>(null)
-  const [svgPreview, setSvgPreview] = useState<string | null>(null)
+  const [pcbSvg, setPcbSvg] = useState<string | null>(null)
+  const [schematicSvg, setSchematicSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [downloadUrls, setDownloadUrls] = useState<{ kicad?: string; gerber?: string; bom?: string }>({})
 
@@ -20,7 +22,8 @@ export function ConsoleInterface() {
     setError(null)
     setGeneratedCode(null)
     setCircuitJson(null)
-    setSvgPreview(null)
+    setPcbSvg(null)
+    setSchematicSvg(null)
     setDownloadUrls({})
 
     try {
@@ -53,8 +56,12 @@ export function ConsoleInterface() {
           // Save circuitJson for later use in downloads
           setCircuitJson(compileData.data.circuitJson)
           
-          if (compileData.data.svg) {
-            setSvgPreview(compileData.data.svg)
+          // Set both PCB and schematic SVGs
+          if (compileData.data.pcbSvg) {
+            setPcbSvg(compileData.data.pcbSvg)
+          }
+          if (compileData.data.schematicSvg) {
+            setSchematicSvg(compileData.data.schematicSvg)
           }
         }
       }
@@ -68,7 +75,7 @@ export function ConsoleInterface() {
 
   const handleDownload = async (type: 'kicad' | 'gerber' | 'bom') => {
     if (!circuitJson) {
-      alert('Please generate a circuit first')
+      alert('请先生成电路')
       return
     }
 
@@ -120,7 +127,7 @@ export function ConsoleInterface() {
       document.body.removeChild(a)
     } catch (err) {
       console.error(err)
-      alert(`Failed to download ${type}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      alert(`下载失败 ${type}: ${err instanceof Error ? err.message : '未知错误'}`)
     }
   }
 
@@ -129,64 +136,93 @@ export function ConsoleInterface() {
       <header className="console-header">
         <div className="status-indicator">
           <span className={`status-dot ${status}`} />
-          <span className="status-text">{status.toUpperCase()}</span>
+          <span className="status-text">
+            {status === 'connected' ? '已连接' : status === 'connecting' ? '连接中' : '未连接'}
+          </span>
         </div>
-        <h2>AI Circuit Designer</h2>
+        <h2>AI 电路设计器</h2>
       </header>
 
       <div className="main-layout">
         <div className="left-panel">
           <form onSubmit={handleSubmit} className="prompt-form">
             <div className="input-group">
-              <label htmlFor="prompt">Describe your circuit requirement:</label>
+              <label htmlFor="prompt">描述您的电路需求：</label>
               <textarea
                 id="prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. A 555 timer circuit blinking an LED at 1Hz powered by 9V battery..."
+                placeholder="例如：一个由9V电池供电的555定时器电路，以1Hz频率闪烁LED..."
                 disabled={isProcessing}
                 className="prompt-input"
               />
             </div>
             <button type="submit" disabled={isProcessing || !prompt.trim()} className="submit-btn">
-              {isProcessing ? 'PROCESSING...' : 'GENERATE CIRCUIT'}
+              {isProcessing ? '处理中...' : '生成电路'}
             </button>
           </form>
 
           <div className="logs-section">
-            <div className="section-title">SYSTEM LOGS</div>
-            <LogViewer logs={logs} className="log-viewer-component" />
+            <div className="section-title">系统日志</div>
+            <LogViewer logs={logs} className="log-viewer-component" onClear={clearLogs} />
           </div>
         </div>
 
         <div className="right-panel">
           <div className="preview-section">
-            <div className="section-title">CIRCUIT PREVIEW</div>
-            <div className="preview-container">
-              {error ? (
-                <div className="error-message">{error}</div>
-              ) : svgPreview ? (
-                <div className="svg-wrapper" dangerouslySetInnerHTML={{ __html: svgPreview }} />
-              ) : (
-                <div className="placeholder-text">
-                  {isProcessing ? 'Generating circuit design...' : 'Ready to generate.'}
-                </div>
+            <div className="section-title">
+              电路预览
+              {(pcbSvg || schematicSvg) && (
+                <span className="preview-status">
+                  {pcbSvg && schematicSvg && ' • PCB + 原理图'}
+                  {pcbSvg && !schematicSvg && ' • 仅PCB'}
+                  {!pcbSvg && schematicSvg && ' • 仅原理图'}
+                </span>
               )}
             </div>
+            {error ? (
+              <div className="error-message-box">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ marginBottom: '12px' }}>
+                  <circle cx="24" cy="24" r="20" stroke="#f48771" strokeWidth="2" fill="none" />
+                  <path d="M24 16v12M24 32v2" stroke="#f48771" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+                <div>{error}</div>
+                <button 
+                  onClick={() => setError(null)} 
+                  className="error-dismiss-btn"
+                  style={{ marginTop: '12px' }}
+                >
+                  关闭
+                </button>
+              </div>
+            ) : isProcessing ? (
+              <div className="processing-message">
+                <div className="spinner"></div>
+                <p>正在生成电路设计...</p>
+                <p className="processing-hint">正在编译代码并生成预览图</p>
+              </div>
+            ) : (
+              <SchematicViewer 
+                pcbSvg={pcbSvg}
+                schematicSvg={schematicSvg}
+                circuitJson={circuitJson}
+                className="schematic-viewer-component"
+              />
+            )}
           </div>
 
           {generatedCode && (
             <div className="actions-section">
-                <div className="section-title">EXPORTS</div>
+                <div className="section-title">导出文件</div>
                 <div className="button-group">
                     <button onClick={() => handleDownload('kicad')} className="action-btn">
-                        Download KiCad PCB
+                        下载 KiCad PCB
                     </button>
                     <button onClick={() => handleDownload('gerber')} className="action-btn secondary">
-                        Download Gerbers
+                        下载 Gerber 文件
                     </button>
                     <button onClick={() => handleDownload('bom')} className="action-btn secondary">
-                        Download BOM
+                        下载物料清单
                     </button>
                 </div>
             </div>
@@ -255,6 +291,8 @@ export function ConsoleInterface() {
           flex-direction: column;
           gap: 20px;
           height: 100%;
+          min-height: 0;
+          min-width: 0;
         }
 
         .prompt-form {
@@ -320,7 +358,7 @@ export function ConsoleInterface() {
           flex: 1;
           display: flex;
           flex-direction: column;
-          min-height: 300px;
+          min-height: 0;
         }
 
         .section-title {
@@ -330,6 +368,17 @@ export function ConsoleInterface() {
           text-transform: uppercase;
           letter-spacing: 0.1em;
           font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .preview-status {
+          font-size: 0.7rem;
+          color: #4caf50;
+          text-transform: none;
+          font-weight: 500;
+          letter-spacing: normal;
         }
 
         .log-viewer-component {
@@ -343,50 +392,79 @@ export function ConsoleInterface() {
             flex: 1;
             display: flex;
             flex-direction: column;
-            min-height: 400px;
+            min-height: 0;
+            min-width: 0;
+            gap: 12px;
         }
 
-        .preview-container {
+        .schematic-viewer-component {
+            flex: 1;
+            min-height: 0;
+            min-width: 0;
+        }
+
+        .error-message-box {
+            background: #111;
+            border: 1px solid #f48771;
+            border-radius: 6px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #f48771;
+            padding: 40px 20px;
+            text-align: center;
+            max-width: 80%;
+            margin: auto;
+        }
+
+        .error-dismiss-btn {
+            background: transparent;
+            border: 1px solid #f48771;
+            color: #f48771;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .error-dismiss-btn:hover {
+            background: #f48771;
+            color: #111;
+        }
+
+        .processing-message {
             background: #111;
             border: 1px solid #333;
             border-radius: 6px;
             flex: 1;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
-            position: relative;
+            gap: 12px;
+            color: #888;
         }
 
-        .svg-wrapper {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        
-        .svg-wrapper svg {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
+        .processing-hint {
+            font-size: 12px;
+            color: #666;
+            margin: 0;
         }
 
-        .placeholder-text {
-            color: #444;
-            font-style: italic;
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #222;
+            border-top-color: #fbf0df;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
 
-        .error-message {
-            color: #f48771;
-            padding: 20px;
-            background: rgba(244, 135, 113, 0.1);
-            border-radius: 6px;
-            max-width: 80%;
-            text-align: center;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         .actions-section {

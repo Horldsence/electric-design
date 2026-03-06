@@ -1,21 +1,7 @@
 import { test } from 'bun:test'
-import { mkdir } from 'node:fs/promises'
 import { convertToKiCad } from '../../src/services/kicad/converter'
 import { compilerService } from '../../src/services/tscircuit/compiler'
-
-async function saveKicadFiles(name: string, kicadFiles: { pcb: string; sch: string }) {
-  const outputDir = 'tests/output/kicad'
-  await mkdir(outputDir, { recursive: true })
-
-  const pcbPath = `${outputDir}/${name}.kicad_pcb`
-  const schPath = `${outputDir}/${name}.kicad_sch`
-
-  await Bun.write(pcbPath, kicadFiles.pcb)
-  await Bun.write(schPath, kicadFiles.sch)
-
-  console.log(`  ✓ Saved ${pcbPath}`)
-  console.log(`  ✓ Saved ${schPath}`)
-}
+import { saveKicadFiles } from '../../src/util/file-writer'
 
 test('simple resistor - save to KiCad files', async () => {
   const code = `
@@ -30,7 +16,9 @@ test('simple resistor - save to KiCad files', async () => {
   const compileResult = await compilerService.compile(sessionId, code)
   const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-  await saveKicadFiles('simple-resistor', kicadFiles)
+  const { pcbPath, schPath } = await saveKicadFiles('simple-resistor', kicadFiles)
+  console.log(`  ✓ Saved ${pcbPath}`)
+  console.log(`  ✓ Saved ${schPath}`)
 
   compilerService.cleanup(sessionId)
 })
@@ -49,7 +37,9 @@ test('resistor + LED - save to KiCad files', async () => {
   const compileResult = await compilerService.compile(sessionId, code)
   const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-  await saveKicadFiles('resistor-led', kicadFiles)
+  const { pcbPath, schPath } = await saveKicadFiles('resistor-led', kicadFiles)
+  console.log(`  ✓ Saved ${pcbPath}`)
+  console.log(`  ✓ Saved ${schPath}`)
 
   compilerService.cleanup(sessionId)
 })
@@ -78,7 +68,9 @@ test('chip + resistor + capacitor - save to KiCad files', async () => {
   const compileResult = await compilerService.compile(sessionId, code)
   const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-  await saveKicadFiles('chip-rc', kicadFiles)
+  const { pcbPath, schPath } = await saveKicadFiles('chip-rc', kicadFiles)
+  console.log(`  ✓ Saved ${pcbPath}`)
+  console.log(`  ✓ Saved ${schPath}`)
 
   compilerService.cleanup(sessionId)
 })

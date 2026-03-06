@@ -17,10 +17,11 @@ type LogEntry = {
 
 class Logger {
   private minLevel: LogLevel
-  private isProduction = process.env.NODE_ENV === 'production'
+  private isProduction: boolean
 
-  constructor(minLevel: LogLevel = 'info') {
+  constructor(minLevel: LogLevel = 'info', isProduction = false) {
     this.minLevel = minLevel
+    this.isProduction = isProduction
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -154,5 +155,7 @@ class Logger {
   }
 }
 
-const logLevel = (process.env.LOG_LEVEL as LogLevel) || 'info'
-export const logger = new Logger(logLevel)
+import { getLogLevel, isProduction } from './config'
+
+const logLevel = getLogLevel()
+export const logger = new Logger(logLevel, isProduction())

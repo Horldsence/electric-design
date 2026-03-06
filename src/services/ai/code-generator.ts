@@ -1,5 +1,8 @@
+import { getAIConfig } from '../../lib/config'
 import { createPipelineLogger } from '../../lib/debug'
-import type { AIGenerationResult, PromptConfig } from '../../types/ai'
+import type { AIGenerationResult } from '../../types/ai'
+import { compilerService } from '../tscircuit/compiler'
+import { PROMPT_CONFIG, getBaseUserPrompt, getErrorRecoveryPrompt } from './prompts'
 
 const FALLBACK_CODE = `
 export default () => (
@@ -13,30 +16,14 @@ export default () => (
 )
 `
 
-const PROMPT_CONFIG: PromptConfig = {
-  systemPrompt: 'You are an expert electronic circuit designer specializing in tscircuit.',
-  userPromptTemplate: `Create a tscircuit circuit based on this requirement: {prompt}
+const MAX_TOTAL_ATTEMPTS = 5
+const MAX_INITIAL_ATTEMPTS = 2
 
-Requirements:
-- Use tscircuit JSX syntax with <board>, <resistor>, <led>, <chip>, <trace>
-- All components must have name and footprint attributes
-- Connect components with <trace> elements
-- Use power nets: net.VCC, net.GND
-- Return ONLY the code, no explanation`,
-  examples: [],
-  constraints: [
-    'Code must be valid TypeScript/JSX',
-    'All components require footprints',
-    'All connections must use traces',
-    'Return only code, no markdown blocks',
-  ],
-}
-
-export async function generateCode(userPrompt: string, maxRetries = 3): AIGenerationResult {
+export async function generateCode(userPrompt: string): AIGenerationResult {
   const log = createPipelineLogger('ai-generation', `gen_${Date.now()}`)
-  const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY
+  const aiConfig = getAIConfig()
 
-  if (!apiKey) {
+  if (!aiConfig.apiKey) {
     log.warn('No API key found, using fallback code')
     return {
       code: FALLBACK_CODE,
@@ -46,31 +33,73 @@ export async function generateCode(userPrompt: string, maxRetries = 3): AIGenera
     }
   }
 
-  log.info('Starting AI code generation', { promptLength: userPrompt.length, maxRetries })
+  log.info('Starting AI code generation with self-healing', { promptLength: userPrompt.length })
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  let currentPrompt = userPrompt
+  let attemptCount = 0
+  let isRecoveryMode = false
+
+  while (attemptCount < MAX_TOTAL_ATTEMPTS) {
+    attemptCount++
+    const attemptType = isRecoveryMode ? 'recovery' : 'initial'
+
     try {
-      const code = await callLLM(userPrompt, apiKey)
+      const promptToSend = isRecoveryMode
+        ? getErrorRecoveryPrompt(currentPrompt.split('\n'))
+        : getBaseUserPrompt(currentPrompt)
+
+      const code = await callLLM(promptToSend, isRecoveryMode)
       const cleaned = extractCode(code)
 
-      if (isValidTscircuitCode(cleaned)) {
-        log.info('Successfully generated code', { attempt, codeLength: cleaned.length })
-        return {
-          code: cleaned,
-          success: true,
-          retryCount: attempt,
+      if (!isValidTscircuitCode(cleaned)) {
+        log.debug('Generated code invalid, retrying', { attempt: attemptCount, type: attemptType })
+        if (attemptCount >= MAX_INITIAL_ATTEMPTS && !isRecoveryMode) {
+          isRecoveryMode = true
+          currentPrompt = userPrompt
         }
+        continue
       }
 
-      log.debug('Generated code invalid, retrying', { attempt })
+      const sessionId = `validate_${Date.now()}`
+      const compileResult = await compilerService.compile(sessionId, cleaned)
+      compilerService.cleanup(sessionId)
+
+      if (compileResult.errors && compileResult.errors.length > 0) {
+        const errorMessages = compileResult.errors.map(e => e.message)
+        log.warn('Compilation failed, entering recovery mode', {
+          attempt: attemptCount,
+          errors: errorMessages,
+        })
+
+        if (!isRecoveryMode) {
+          isRecoveryMode = true
+        }
+
+        currentPrompt = errorMessages.join('\n')
+        continue
+      }
+
+      log.info('Successfully generated and validated code', {
+        attempt: attemptCount,
+        type: attemptType,
+        codeLength: cleaned.length,
+      })
+
+      return {
+        code: cleaned,
+        success: true,
+        retryCount: attemptCount - 1,
+        fallback: false,
+      }
     } catch (error) {
-      log.error('LLM call failed', error)
-      if (attempt === maxRetries - 1) {
-        log.warn('All retries exhausted, using fallback')
+      log.error('Generation attempt failed', error, { attempt: attemptCount, type: attemptType })
+
+      if (attemptCount >= MAX_TOTAL_ATTEMPTS) {
+        log.warn('All attempts exhausted, using fallback')
         return {
           code: FALLBACK_CODE,
           success: true,
-          retryCount: maxRetries,
+          retryCount: attemptCount,
           fallback: true,
         }
       }
@@ -81,60 +110,70 @@ export async function generateCode(userPrompt: string, maxRetries = 3): AIGenera
   return {
     code: FALLBACK_CODE,
     success: true,
-    retryCount: maxRetries,
+    retryCount: attemptCount,
     fallback: true,
   }
 }
 
-async function callLLM(prompt: string, apiKey: string): string {
-  const isOpenAI = apiKey.startsWith('sk-')
+async function callLLM(prompt: string, isRecovery = false): string {
+  const aiConfig = getAIConfig()
+  const temperature = isRecovery ? aiConfig.temperature * 0.5 : aiConfig.temperature
+  const baseUrl =
+    aiConfig.baseUrl ||
+    (aiConfig.provider === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com/v1')
 
-  if (isOpenAI) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  if (aiConfig.provider === 'openai') {
+    const url = `${baseUrl}/chat/completions`
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${aiConfig.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: aiConfig.model,
         messages: [
           { role: 'system', content: PROMPT_CONFIG.systemPrompt },
-          { role: 'user', content: PROMPT_CONFIG.userPromptTemplate.replace('{prompt}', prompt) },
+          { role: 'user', content: prompt },
         ],
-        temperature: 0.7,
-        max_tokens: 2000,
+        temperature,
+        max_tokens: aiConfig.maxTokens,
       }),
     })
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`)
+      const error = await response.text()
+      throw new Error(`OpenAI API error: ${response.status} - ${error}`)
     }
 
     const data = await response.json()
     return data.choices[0].message.content
   }
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+
+  const url = `${baseUrl}/messages`
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'x-api-key': apiKey,
+      'x-api-key': aiConfig.apiKey,
       'Content-Type': 'application/json',
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 2000,
+      model: aiConfig.model,
+      max_tokens: aiConfig.maxTokens,
+      system: PROMPT_CONFIG.systemPrompt,
       messages: [
         {
           role: 'user',
-          content: `${PROMPT_CONFIG.systemPrompt}\n\n${PROMPT_CONFIG.userPromptTemplate.replace('{prompt}', prompt)}`,
+          content: prompt,
         },
       ],
     }),
   })
 
   if (!response.ok) {
-    throw new Error(`Anthropic API error: ${response.status}`)
+    const error = await response.text()
+    throw new Error(`Anthropic API error: ${response.status} - ${error}`)
   }
 
   const data = await response.json()

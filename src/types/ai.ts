@@ -9,7 +9,7 @@ export type AIGenerationResult = {
   code: string
   success: boolean
   retryCount: number
-  fallback?: boolean
+  fallback: boolean
 }
 
 /**

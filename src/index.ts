@@ -1,13 +1,16 @@
 import { serve } from 'bun'
 import index from './index.html'
+import { getConfig, isDevelopment } from './lib/config'
 import { POST as compilePost } from './routes/compile'
 import { POST as compileAndConvertPost } from './routes/compile-and-convert'
 import { POST as convertPost } from './routes/convert'
 import { POST as exportPost } from './routes/export'
+import { POST as generatePost } from './routes/generate'
+
+const _config = getConfig()
 
 const server = serve({
   routes: {
-    // Serve index.html for all unmatched routes.
     '/*': index,
 
     '/api/hello': {
@@ -36,6 +39,10 @@ const server = serve({
       POST: exportPost,
     },
 
+    '/api/generate': {
+      POST: generatePost,
+    },
+
     '/api/compile': {
       POST: compilePost,
     },
@@ -49,11 +56,8 @@ const server = serve({
     },
   },
 
-  development: process.env.NODE_ENV !== 'production' && {
-    // Enable browser hot reloading in development
+  development: isDevelopment() && {
     hmr: true,
-
-    // Echo console logs from the browser to the server
     console: true,
   },
 })

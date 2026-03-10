@@ -15,6 +15,21 @@ type PipelineResult = {
     kicadFiles: { pcb: string; sch: string }
     validation: { isValid: boolean; errors: unknown[] }
     artifacts?: unknown
+    ercResult?: DrcResult | ErcResult
+    drcResult?: DrcResult | ErcResult
+    autoFixResult?: {
+      fixed: boolean
+      attempts: number
+      originalErrors: number
+      remainingErrors: number
+      fixedCode?: string
+      fixHistory: Array<{
+        attempt: number
+        strategy: string
+        errorsFound: number
+        errorTypes: string[]
+      }>
+    }
   }
   error?: {
     type: string

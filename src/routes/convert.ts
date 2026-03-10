@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const validation = validateCircuit(circuitJson)
+    const validation = await validateCircuit(circuitJson)
 
     if (!validation.isValid) {
       return Response.json(

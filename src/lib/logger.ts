@@ -53,8 +53,8 @@ class Logger {
         time: entry.timestamp,
         ctx: entry.context,
         msg: entry.message,
-        ...(entry.data && { data: entry.data }),
-        ...(entry.error && { err: entry.error }),
+        ...(entry.data ? { data: entry.data } : {}),
+        ...(entry.error ? { err: entry.error } : {}),
       })
     }
 
@@ -97,14 +97,14 @@ class Logger {
         break
     }
 
-    for (const listener of this.listeners) {
+    this.listeners.forEach(listener => {
       try {
         listener(entry)
       } catch (e) {
         // Prevent listener errors from crashing the app
         console.error('Error in log listener', e)
       }
-    }
+    })
   }
 
   debug(context: string, message: string, data?: unknown) {

@@ -2,7 +2,12 @@ import { getAIConfig } from '../../lib/config'
 import { createPipelineLogger } from '../../lib/debug'
 import type { AIGenerationResult } from '../../types/ai'
 import { compilerService } from '../tscircuit/compiler'
-import { PROMPT_CONFIG, getBaseUserPrompt, getErrorRecoveryPrompt } from './prompts'
+import {
+  PROMPT_CONFIG,
+  getBaseUserPrompt,
+  getEnhancedErrorRecoveryPrompt,
+  getErrorRecoveryPrompt,
+} from './prompts'
 
 const FALLBACK_CODE = `
 export default () => (
@@ -19,7 +24,7 @@ export default () => (
 const MAX_TOTAL_ATTEMPTS = 5
 const MAX_INITIAL_ATTEMPTS = 2
 
-export async function generateCode(userPrompt: string): AIGenerationResult {
+export async function generateCode(userPrompt: string): Promise<AIGenerationResult> {
   const log = createPipelineLogger('ai-generation', `gen_${Date.now()}`)
   const aiConfig = getAIConfig()
 
@@ -65,17 +70,26 @@ export async function generateCode(userPrompt: string): AIGenerationResult {
       compilerService.cleanup(sessionId)
 
       if (compileResult.errors && compileResult.errors.length > 0) {
-        const errorMessages = compileResult.errors.map(e => e.message)
         log.warn('Compilation failed, entering recovery mode', {
           attempt: attemptCount,
-          errors: errorMessages,
+          errorCount: compileResult.errors.length,
+          errorTypes: compileResult.errors.map(e => e.type),
+          errorLocations: compileResult.errors.map(e => e.location?.line ?? 'unknown'),
         })
 
         if (!isRecoveryMode) {
           isRecoveryMode = true
         }
 
-        currentPrompt = errorMessages.join('\n')
+        const enhancedPrompt = getEnhancedErrorRecoveryPrompt(cleaned, compileResult.errors)
+
+        log.debug('Generated enhanced error recovery prompt', {
+          promptLength: enhancedPrompt.length,
+          sourceCodeLength: cleaned.length,
+          errorCount: compileResult.errors.length,
+        })
+
+        currentPrompt = enhancedPrompt
         continue
       }
 
@@ -92,7 +106,7 @@ export async function generateCode(userPrompt: string): AIGenerationResult {
         fallback: false,
       }
     } catch (error) {
-      log.error('Generation attempt failed', error, { attempt: attemptCount, type: attemptType })
+      log.error('Generation attempt failed', error)
 
       if (attemptCount >= MAX_TOTAL_ATTEMPTS) {
         log.warn('All attempts exhausted, using fallback')
@@ -115,12 +129,21 @@ export async function generateCode(userPrompt: string): AIGenerationResult {
   }
 }
 
-async function callLLM(prompt: string, isRecovery = false): string {
+async function callLLM(prompt: string, isRecovery = false): Promise<string> {
+  const log = createPipelineLogger('ai-generation', `llm_${Date.now()}`)
   const aiConfig = getAIConfig()
   const temperature = isRecovery ? aiConfig.temperature * 0.5 : aiConfig.temperature
   const baseUrl =
     aiConfig.baseUrl ||
     (aiConfig.provider === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com/v1')
+
+  log.debug('Calling LLM', {
+    provider: aiConfig.provider,
+    model: aiConfig.model,
+    temperature,
+    promptLength: prompt.length,
+    isRecovery,
+  })
 
   if (aiConfig.provider === 'openai') {
     const url = `${baseUrl}/chat/completions`
@@ -143,11 +166,20 @@ async function callLLM(prompt: string, isRecovery = false): string {
 
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(`OpenAI API error: ${response.status} - ${error}`)
+      const apiError = new Error(`OpenAI API error: ${response.status} - ${error}`)
+      log.error('OpenAI API request failed', apiError)
+      throw apiError
     }
 
     const data = await response.json()
-    return data.choices[0].message.content
+    const content = data.choices[0].message.content
+
+    log.debug('LLM response received', {
+      responseLength: content.length,
+      finishReason: data.choices[0].finish_reason,
+    })
+
+    return content
   }
 
   const url = `${baseUrl}/messages`
@@ -173,19 +205,25 @@ async function callLLM(prompt: string, isRecovery = false): string {
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`Anthropic API error: ${response.status} - ${error}`)
+    const apiError = new Error(`Anthropic API error: ${response.status} - ${error}`)
+    log.error('Anthropic API request failed', apiError)
+    throw apiError
   }
 
   const data = await response.json()
-  return data.content[0].text
+  const content = data.content[0].text
+
+  log.debug('LLM response received', {
+    responseLength: content.length,
+    stopReason: data.stop_reason,
+  })
+
+  return content
 }
 
 function extractCode(raw: string): string {
   const codeBlockMatch = raw.match(/```(?:tsx|typescript)?\n([\s\S]+?)```/)
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim()
-  }
-  return raw.trim()
+  return codeBlockMatch?.[1]?.trim() ?? raw.trim()
 }
 
 function isValidTscircuitCode(code: string): boolean {

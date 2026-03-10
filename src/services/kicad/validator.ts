@@ -1,7 +1,9 @@
 import { createPipelineLogger } from '../../lib/debug'
 import type {
   BomEntry,
+  DrcError,
   DrcResult,
+  ErcError,
   ErcResult,
   GerberFiles,
   KiBotOutput,
@@ -140,8 +142,9 @@ class KiCadCli {
 
     // Remove Python virtual environment variables that might interfere
     if (process.env.VIRTUAL_ENV) {
-      env.VIRTUAL_ENV = undefined
-      env.PYTHONHOME = undefined
+      // Set to empty string instead of undefined to avoid delete operator
+      env.VIRTUAL_ENV = ''
+      env.PYTHONHOME = ''
 
       const venvPath = process.env.VIRTUAL_ENV
       const pathSep = process.platform === 'win32' ? ';' : ':'
@@ -173,22 +176,35 @@ function parseViolations(
   try {
     const parsed = JSON.parse(stdout || '{}')
 
-    const errors: Array<{ type: string; message: string; location?: Record<string, unknown> }> = []
-    const warnings: Array<{ type: string; message: string; location?: Record<string, unknown> }> =
-      []
+    // Use proper error/warning types based on checkType
+    const errors: (ErcError | DrcError)[] = []
+    const warnings: (ErcError | DrcError)[] = []
 
     if (parsed.violations && Array.isArray(parsed.violations)) {
       log.debug('Parsing violations', { count: parsed.violations.length })
 
       for (const violation of parsed.violations) {
-        const entry = {
-          type: violation.type || violation.rule || `${checkType}_violation`,
-          message: violation.description || violation.message || 'Unknown violation',
-          location:
-            checkType === 'drc'
-              ? { x: violation.x || '0', y: violation.y || '0', layer: violation.layer }
-              : { file: violation.file, line: violation.line },
-        }
+        const entry: ErcError | DrcError =
+          checkType === 'drc'
+            ? {
+                type: violation.type || violation.rule || 'drc_violation',
+                message: violation.description || violation.message || 'Unknown violation',
+                location: {
+                  x: String(violation.x || '0'),
+                  y: String(violation.y || '0'),
+                  layer: violation.layer ? String(violation.layer) : undefined,
+                },
+              }
+            : {
+                type: violation.type || violation.rule || 'erc_violation',
+                message: violation.description || violation.message || 'Unknown violation',
+                location: violation.file
+                  ? {
+                      file: String(violation.file),
+                      line: violation.line ? Number(violation.line) : undefined,
+                    }
+                  : undefined,
+              }
 
         if (violation.severity === 'warning' || violation.severity === 'excluded') {
           warnings.push(entry)
@@ -230,7 +246,7 @@ function parseViolations(
       report: stdout,
       errors,
       warnings,
-    }
+    } as ErcResult | DrcResult
   } catch (error) {
     // If it's already a KiCadValidationError, rethrow it
     if (error instanceof KiCadValidationError) {
@@ -252,8 +268,8 @@ function parseTextOutput(
   exitCode: number,
   checkType: 'erc' | 'drc',
 ): ErcResult | DrcResult {
-  const errors: Array<{ type: string; message: string; location?: Record<string, unknown> }> = []
-  const warnings: Array<{ type: string; message: string; location?: Record<string, unknown> }> = []
+  const errors: (ErcError | DrcError)[] = []
+  const warnings: (ErcError | DrcError)[] = []
 
   const combinedOutput = `${stdout}\n${stderr}`
   const lines = combinedOutput.split('\n')
@@ -271,12 +287,12 @@ function parseTextOutput(
 
     if (isError) {
       errors.push({
-        type: `${checkType}_error`,
+        type: checkType + '_error',
         message: line.trim(),
       })
     } else if (isWarning) {
       warnings.push({
-        type: `${checkType}_warning`,
+        type: checkType + '_warning',
         message: line.trim(),
       })
     }
@@ -285,8 +301,8 @@ function parseTextOutput(
   // If exit code is non-zero and we found no errors, treat as error
   if (exitCode !== 0 && errors.length === 0) {
     errors.push({
-      type: `${checkType}_unknown`,
-      message: `${checkType.toUpperCase()} check failed with exit code ${exitCode}`,
+      type: checkType + '_unknown',
+      message: checkType.toUpperCase() + ' check failed with exit code ' + exitCode,
     })
   }
 
@@ -295,7 +311,7 @@ function parseTextOutput(
     report: combinedOutput,
     errors,
     warnings,
-  }
+  } as ErcResult | DrcResult
 }
 
 /**
@@ -519,11 +535,13 @@ function parseBomCsv(csv: string): BomEntry[] {
   const lines = csv.split('\n').filter(line => line.trim())
   if (lines.length < 2) return []
 
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+  const firstLine = lines[0] ?? ''
+  const headers = firstLine.split(',').map(h => h.trim().replace(/"/g, ''))
   const bom: BomEntry[] = []
 
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
+    const currentLine = lines[i] ?? ''
+    const values = currentLine.split(',').map(v => v.trim().replace(/"/g, ''))
     if (values.length < headers.length) continue
 
     const entry: BomEntry = {
@@ -535,8 +553,9 @@ function parseBomCsv(csv: string): BomEntry[] {
 
     // Add other properties
     for (let j = 0; j < headers.length; j++) {
-      if (!['Reference', 'Value', 'Footprint'].includes(headers[j])) {
-        entry[headers[j]] = values[j]
+      const header = headers[j]
+      if (header && !['Reference', 'Value', 'Footprint'].includes(header)) {
+        entry[header] = values[j]
       }
     }
 

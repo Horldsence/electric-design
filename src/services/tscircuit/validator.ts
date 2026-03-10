@@ -1,23 +1,16 @@
 import { runAllChecks } from '@tscircuit/checks'
 import type { ValidationError, ValidationResult } from '../../types/tscircuit'
 
-type TscircuitCheckError = {
-  error_type?: string
-  type?: string
-  message: string
-  circuit_element_id?: string
-}
-
 export async function validateCircuit(circuitJson: unknown[]): Promise<ValidationResult> {
   try {
-    const errors = await runAllChecks(circuitJson as TscircuitCheckError[])
+    const errors = await runAllChecks(circuitJson as any)
     const connectionErrors = detectUnconnectedComponents(circuitJson)
     const allErrors = [...errors, ...connectionErrors]
 
     return {
       isValid: allErrors.length === 0,
       errors: allErrors.map(
-        (e: TscircuitCheckError): ValidationError => ({
+        (e: any): ValidationError => ({
           type: e.error_type || e.type || 'validation_error',
           message: e.message,
           circuit_element_id: e.circuit_element_id,
@@ -42,8 +35,8 @@ export async function validateCircuit(circuitJson: unknown[]): Promise<Validatio
 /**
  * Detect components that have no trace connections
  */
-function detectUnconnectedComponents(circuitJson: unknown[]): TscircuitCheckError[] {
-  const errors: TscircuitCheckError[] = []
+function detectUnconnectedComponents(circuitJson: unknown[]): any[] {
+  const errors: any[] = []
 
   type CircuitElement = {
     type?: string

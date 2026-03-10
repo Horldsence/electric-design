@@ -235,11 +235,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, style, className, on
             {log.duration && (
               <span style={{ color: '#c586c0', marginLeft: '8px' }}>({log.duration}ms)</span>
             )}
-            {log.data && (
+            {log.data ? (
               <div style={styles.data}>
                 <pre style={{ margin: 0 }}>{JSON.stringify(log.data, null, 2) || ''}</pre>
               </div>
-            )}
+            ) : null}
             {log.error && (
               <div style={styles.error}>
                 <div>

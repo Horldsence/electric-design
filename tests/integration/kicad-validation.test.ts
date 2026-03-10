@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import { convertToKiCad } from '../../src/services/kicad/converter'
-import { postProcess } from '../../src/services/kicad/validator'
+import { postProcess as postProcessImport } from '../../src/services/kicad/validator'
 import { KiCadValidationError } from '../../src/services/pipeline/error-handler'
 import { compilerService } from '../../src/services/tscircuit/compiler'
+import type { KiBotOutput } from '../../src/types/kicad'
+import type { PostProcessOptions } from '../../src/types/kicad'
+
+// Type assertion wrapper to help TypeScript
+const postProcessTyped: (
+  kicadFiles: { pcb: string; sch: string },
+  options: PostProcessOptions,
+  sessionId?: string,
+) => Promise<KiBotOutput> = postProcessImport
 
 describe('KiCad CLI integration', () => {
   let kicadInstalled = false
@@ -32,7 +41,7 @@ describe('KiCad CLI integration', () => {
 
     const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-    await postProcess(kicadFiles, { runErc: true }, sessionId)
+    await postProcessTyped(kicadFiles, { runErc: true }, sessionId)
 
     compilerService.cleanup(sessionId)
   })
@@ -53,7 +62,7 @@ describe('KiCad CLI integration', () => {
 
     const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-    await postProcess(kicadFiles, { runDrc: true }, sessionId)
+    await postProcessTyped(kicadFiles, { runDrc: true }, sessionId)
 
     compilerService.cleanup(sessionId)
   })
@@ -80,7 +89,7 @@ describe('KiCad CLI integration', () => {
 
       let caughtError = false
       try {
-        await postProcess(kicadFiles, { runErc: true }, sessionId)
+        await postProcessTyped(kicadFiles, { runErc: true }, sessionId)
       } catch (error) {
         caughtError = true
         expect(error).toBeInstanceOf(KiCadValidationError)
@@ -118,7 +127,7 @@ describe('KiCad CLI integration', () => {
 
       let caughtError = false
       try {
-        await postProcess(kicadFiles, { runDrc: true }, sessionId)
+        await postProcessTyped(kicadFiles, { runDrc: true }, sessionId)
       } catch (error) {
         caughtError = true
         expect(error).toBeInstanceOf(KiCadValidationError)
@@ -150,7 +159,7 @@ describe('KiCad CLI integration', () => {
 
     const kicadFiles = convertToKiCad(compileResult.circuitJson)
 
-    const result = await postProcess(
+    const result = await postProcessTyped(
       kicadFiles,
       { runErc: true, runDrc: true, generateGerber: true },
       sessionId,

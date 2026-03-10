@@ -1,4 +1,4 @@
-import { createPipelineLogger } from './lib/debug'
+import { createPipelineLogger } from '../lib/debug'
 
 const log = createPipelineLogger('example', 'session_123')
 

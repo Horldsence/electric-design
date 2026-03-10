@@ -1,9 +1,10 @@
 import { runTscircuitCode } from '@tscircuit/eval'
 import { createPipelineLogger } from '../../lib/debug'
 import type { CompilationResult } from '../../types/tscircuit'
+import { extractErrors } from './error-extractor'
 
 export class CompilerService {
-  async compile(sessionId: string, code: string): CompilationResult {
+  async compile(sessionId: string, code: string): Promise<CompilationResult> {
     const log = createPipelineLogger('tscircuit-compile', sessionId)
 
     try {
@@ -18,16 +19,20 @@ export class CompilerService {
 
       return { circuitJson, logs: [] }
     } catch (error) {
+      const errors = extractErrors(error, code)
+
       log.error('Compilation failed', error)
+      log.warn('Error details', {
+        errorCount: errors.length,
+        errorTypes: errors.map(e => e.type),
+        errorLocations: errors.map(e => e.location?.line ?? 'unknown'),
+      })
+
       return {
         circuitJson: [],
         logs: [],
-        errors: [
-          {
-            type: 'compilation_error',
-            message: error instanceof Error ? error.message : String(error),
-          },
-        ],
+        errors,
+        sourceCode: code,
       }
     }
   }

@@ -3,6 +3,7 @@
  */
 
 import type { PromptConfig } from '../../types/ai'
+import type { CompilationError } from '../../types/errors'
 
 /**
  * System prompt - defines the AI's role and expertise
@@ -208,4 +209,69 @@ export function getErrorRecoveryPrompt(errors: string[]): string {
  */
 export function getBaseUserPrompt(requirement: string): string {
   return BASE_USER_PROMPT.replace('{prompt}', requirement)
+}
+
+export function getEnhancedErrorRecoveryPrompt(
+  sourceCode: string,
+  errors: CompilationError[],
+): string {
+  const priority: Record<string, number> = { syntax: 3, circuit: 2, runtime: 1 }
+  const sortedErrors = [...errors].sort((a, b) => (priority[b.type] || 0) - (priority[a.type] || 0))
+  const topErrors = sortedErrors.slice(0, 3)
+
+  let errorText = ''
+
+  topErrors.forEach((error, index) => {
+    errorText += `\n## Error ${index + 1}: ${error.type.toUpperCase()}\n\n`
+
+    if (error.message) {
+      errorText += `**Message**: ${error.message}\n\n`
+    }
+
+    if (error.location) {
+      errorText += '**Location**: '
+      if (error.location.line) {
+        errorText += `Line ${error.location.line}`
+      }
+      if (error.location.column) {
+        errorText += `, Column ${error.location.column}`
+      }
+      if (error.location.sourceFile) {
+        errorText += ` in \`${error.location.sourceFile}\``
+      }
+      errorText += '\n\n'
+    }
+
+    if (error.context?.sourceLine) {
+      errorText += '**Error in code**:\n```tsx\n'
+      if (error.location?.line) {
+        errorText += `> ${error.location.line} | ${error.context.sourceLine}\n`
+      } else {
+        errorText += `${error.context.sourceLine}\n`
+      }
+      errorText += '```\n\n'
+    }
+
+    if (error.context?.surroundingLines) {
+      const { before, after } = error.context.surroundingLines
+      const startLine = error.location?.line ? error.location.line - before.length : 1
+
+      errorText += '**Context**:\n```tsx\n'
+      before.forEach((line: string, idx: number) => {
+        errorText += `  ${startLine + idx} | ${line}\n`
+      })
+
+      if (error.location?.line && error.context.sourceLine) {
+        errorText += `> ${error.location.line} | ${error.context.sourceLine}\n`
+      }
+
+      after.forEach((line: string, idx: number) => {
+        const errorLine = error.location?.line ?? 1
+        errorText += `  ${errorLine + 1 + idx} | ${line}\n`
+      })
+      errorText += '```\n\n'
+    }
+  })
+
+  return `${ERROR_RECOVERY_PROMPT.split('{errors}')[0]}${errorText}\n\n**Current Code**:\n\`\`\`tsx\n${sourceCode}\n\`\`\`\n\n**Your Task**: Generate the corrected code that fixes these errors. Return ONLY the complete corrected code, no explanations.`
 }

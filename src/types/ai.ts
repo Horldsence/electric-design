@@ -10,6 +10,8 @@ export type AIGenerationResult = {
   success: boolean
   retryCount: number
   fallback: boolean
+  workspaceFixed?: boolean
+  versionId?: string
 }
 
 /**

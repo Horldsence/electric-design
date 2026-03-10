@@ -37,6 +37,7 @@
 - [API Overview](#api-overview)
 - [Development Notes](#development-notes)
 - [Documentation](#documentation)
+- [Today's Updates](#todays-updates)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -61,6 +62,18 @@ Today, the repository already includes a working backend service structure, a fr
 - Run design validation and checks
 - Export production-oriented deliverables such as Gerbers and BOMs
 - Provide a web-based workflow around the complete process
+
+---
+
+## Today's Updates
+
+Based on today's Git commits, the project has been updated in the following areas:
+
+- **Page bug fix** — resolved a page-related issue to improve UI stability and overall usability
+- **Workspace management** — added workspace loading, initialization, and save-to-workspace flows for organizing generated circuit results
+- **Error-fix file editing support** — added file editing capability to support error-fixing workflows more effectively
+
+These updates improve day-to-day usability and make the application more practical as a circuit design workbench.
 
 ---
 

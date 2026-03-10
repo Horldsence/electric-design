@@ -101,13 +101,7 @@ export class FileManager {
   }
 
   async saveGeneratedResult(options: SaveWorkspaceResultRequest): Promise<string> {
-    const {
-      code,
-      prompt,
-      kicadFiles,
-      timestamp = Date.now(),
-      isValid = true,
-    } = options
+    const { code, prompt, kicadFiles, timestamp = Date.now(), isValid = true } = options
 
     return this.createVersion({
       code,
@@ -203,6 +197,28 @@ export class FileManager {
     } catch {
       return null
     }
+  }
+
+  async updateVersionCode(versionId: string, newCode: string, isValid: boolean): Promise<void> {
+    const version = await this.getVersion(versionId)
+    if (!version) {
+      throw new Error(`Version ${versionId} not found`)
+    }
+
+    const codePath = join(this.workspacePath, version.codeFile)
+    await writeFile(codePath, newCode, 'utf-8')
+
+    await this.updateMeta(meta => ({
+      ...meta,
+      versions: meta.versions.map(v => (v.id === versionId ? { ...v, isValid } : v)),
+      lastModified: Date.now(),
+    }))
+
+    logger.info('version-code-updated', `Version ${versionId} code updated`, {
+      versionId,
+      isValid,
+      codeLength: newCode.length,
+    })
   }
 
   async writeKiCadFiles(pcb: string, sch: string): Promise<void> {

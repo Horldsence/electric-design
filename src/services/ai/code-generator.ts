@@ -1,5 +1,6 @@
 import { getAIConfig } from '../../lib/config'
 import { createPipelineLogger } from '../../lib/debug'
+import { FileManager } from '../../lib/file-manager'
 import type { AIGenerationResult } from '../../types/ai'
 import { compilerService } from '../tscircuit/compiler'
 import {
@@ -24,7 +25,17 @@ export default () => (
 const MAX_TOTAL_ATTEMPTS = 5
 const MAX_INITIAL_ATTEMPTS = 2
 
-export async function generateCode(userPrompt: string): Promise<AIGenerationResult> {
+export interface GenerateCodeOptions {
+  workspacePath?: string
+  versionId?: string
+}
+
+export async function generateCode(
+  userPrompt: string,
+  options?: GenerateCodeOptions,
+): Promise<AIGenerationResult> {
+  const { workspacePath, versionId } = options || {}
+  const fileManager = workspacePath ? new FileManager(workspacePath) : null
   const log = createPipelineLogger('ai-generation', `gen_${Date.now()}`)
   const aiConfig = getAIConfig()
 
@@ -75,17 +86,27 @@ export async function generateCode(userPrompt: string): Promise<AIGenerationResu
           errorCount: compileResult.errors.length,
           errorTypes: compileResult.errors.map(e => e.type),
           errorLocations: compileResult.errors.map(e => e.location?.line ?? 'unknown'),
+          hasWorkspace: !!fileManager,
         })
 
         if (!isRecoveryMode) {
           isRecoveryMode = true
         }
 
-        const enhancedPrompt = getEnhancedErrorRecoveryPrompt(cleaned, compileResult.errors)
+        let sourceCode = cleaned
+        if (fileManager && versionId) {
+          const workspaceCode = await fileManager.readVersionCode(versionId)
+          if (workspaceCode) {
+            sourceCode = workspaceCode
+            log.debug('Using workspace code for error recovery', { codeLength: sourceCode.length })
+          }
+        }
+
+        const enhancedPrompt = getEnhancedErrorRecoveryPrompt(sourceCode, compileResult.errors)
 
         log.debug('Generated enhanced error recovery prompt', {
           promptLength: enhancedPrompt.length,
-          sourceCodeLength: cleaned.length,
+          sourceCodeLength: sourceCode.length,
           errorCount: compileResult.errors.length,
         })
 
@@ -99,11 +120,22 @@ export async function generateCode(userPrompt: string): Promise<AIGenerationResu
         codeLength: cleaned.length,
       })
 
+      if (fileManager && versionId) {
+        try {
+          await fileManager.updateVersionCode(versionId, cleaned, true)
+          log.info('Fixed code saved to workspace', { versionId, codeLength: cleaned.length })
+        } catch (error) {
+          log.error('Failed to save fixed code to workspace', error)
+        }
+      }
+
       return {
         code: cleaned,
         success: true,
         retryCount: attemptCount - 1,
         fallback: false,
+        workspaceFixed: !!fileManager,
+        versionId,
       }
     } catch (error) {
       log.error('Generation attempt failed', error)

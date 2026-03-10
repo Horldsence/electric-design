@@ -54,3 +54,10 @@ export interface InitWorkspaceOptions {
   path: string
   name?: string
 }
+
+export interface UpdateVersionCodeRequest {
+  path: string
+  versionId: string
+  code: string
+  isValid: boolean
+}

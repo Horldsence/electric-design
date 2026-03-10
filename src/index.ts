@@ -22,6 +22,7 @@ import {
 } from './routes/validate-kicad'
 
 const _config = getConfig()
+void _config // Keep for potential future use
 
 const server = serve<WebSocketData>({
   routes: {
@@ -51,6 +52,11 @@ const server = serve<WebSocketData>({
 
     '/api/export': {
       POST: exportPost,
+    },
+
+    '/api/workspace': {
+      POST: (await import('./routes/workspace')).POST,
+      GET: (await import('./routes/workspace')).GET,
     },
 
     '/api/generate': {

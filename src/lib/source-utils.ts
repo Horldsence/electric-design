@@ -97,7 +97,7 @@ export function extractLineRange(sourceCode: string, startLine: number, endLine:
  * // "Line 5"
  * ```
  */
-export function formatSourceLocation(sourceCode: string, line: number, column?: number): string {
+export function formatSourceLocation(line: number, column?: number): string {
   let location = `Line ${line}`
   if (column !== undefined) {
     location += `, Column ${column}`

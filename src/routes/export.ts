@@ -18,11 +18,12 @@ export async function POST(req: Request) {
       )
     }
 
-    const result = await runPipeline(prompt, options)
+    const result = await runPipeline(prompt, options || {})
 
     if (result.success && result.data) {
       return Response.json({
         success: true,
+        versionId: result.versionId,
         data: {
           circuitJson: result.data.circuitJson,
           kicadFiles: result.data.kicadFiles,

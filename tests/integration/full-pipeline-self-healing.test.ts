@@ -39,9 +39,12 @@ test('pipeline handles complex circuit requirements', async () => {
   expect(circuitJson?.length).toBeGreaterThan(2)
 
   const _hasRegulator = circuitJson?.some((el: any) => el.name?.startsWith('U')) ?? false
+  void _hasRegulator // Keep for potential future assertions
   const hasResistor = circuitJson?.some((el: any) => el.name?.startsWith('R')) ?? false
   const _hasCapacitor = circuitJson?.some((el: any) => el.name?.startsWith('C')) ?? false
+  void _hasCapacitor // Keep for potential future assertions
   const _hasLED = circuitJson?.some((el: any) => el.name?.startsWith('LED')) ?? false
+  void _hasLED // Keep for potential future assertions
 
   expect(hasResistor).toBe(true)
   expect(kicadFiles?.pcb.length).toBeGreaterThan(200)

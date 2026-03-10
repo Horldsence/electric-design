@@ -1,4 +1,5 @@
 import { createPipelineLogger } from '../../lib/debug'
+import { FileManager } from '../../lib/file-manager'
 import type { DrcResult, ErcResult } from '../../types/kicad'
 import { generateCode } from '../ai/code-generator'
 import { autoFixValidationErrors, formatValidationErrors } from '../kicad/auto-fix'
@@ -10,6 +11,7 @@ import { KiCadValidationError } from './error-handler'
 
 type PipelineResult = {
   success: boolean
+  versionId?: string
   data?: {
     circuitJson: unknown[]
     kicadFiles: { pcb: string; sch: string }
@@ -40,16 +42,19 @@ type PipelineResult = {
 
 export async function runPipeline(
   userPrompt: string,
-  options = {
-    runErc: false,
-    runDrc: false,
-    generateGerber: false,
-    autoFix: false,
-    maxAutoFixRetries: 3,
-  },
+  options: {
+    runErc?: boolean
+    runDrc?: boolean
+    generateGerber?: boolean
+    autoFix?: boolean
+    maxAutoFixRetries?: number
+    workspace?: string
+  } = {},
 ): Promise<PipelineResult> {
   const sessionId = `session_${Date.now()}`
   const log = createPipelineLogger('pipeline', sessionId)
+
+  const fileManager = options.workspace ? new FileManager(options.workspace) : null
 
   try {
     log.info('Pipeline started', { promptLength: userPrompt.length })
@@ -62,6 +67,7 @@ export async function runPipeline(
     })
 
     const _compileStage = log.stage('compile')
+    void _compileStage // Keep for potential future logging
     const {
       circuitJson,
       logs,
@@ -313,8 +319,26 @@ export async function runPipeline(
 
     log.info('Pipeline completed successfully')
 
+    let versionId: string | undefined
+
+    if (fileManager) {
+      const timestamp = Date.now()
+      versionId = await fileManager.createVersion({
+        code: generationResult.code,
+        prompt: userPrompt,
+        timestamp,
+        isValid: validation.isValid,
+        kicadFiles: {
+          pcb: kicadFiles.pcb,
+          sch: kicadFiles.sch,
+        },
+      })
+      log.info('Version saved', { versionId })
+    }
+
     return {
       success: true,
+      versionId,
       data: {
         circuitJson,
         kicadFiles,

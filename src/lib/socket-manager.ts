@@ -45,6 +45,7 @@ class SocketManager {
   handleMessage(_ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
     try {
       const _data = typeof message === 'string' ? JSON.parse(message) : message
+      void _data // Keep for potential future use
       // Future: handle client messages
     } catch (e) {
       logger.error('socket', 'Failed to parse message', e)

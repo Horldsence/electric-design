@@ -4,9 +4,11 @@ import { useState } from 'react'
 import useSocket from '../hooks/use-socket'
 import { LogViewer } from './LogViewer'
 import { SchematicViewer } from './SchematicViewer'
+import { WorkspaceSelector } from './WorkspaceSelector'
 
 export function ConsoleInterface() {
   const { logs, status, clearLogs } = useSocket()
+  const [workspace, setWorkspace] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [generatedCode, setGeneratedCode] = useState<string | null>(null)
@@ -27,7 +29,6 @@ export function ConsoleInterface() {
     setSchematicSvg(null)
 
     try {
-      // 1. Generate Code
       const genRes = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -42,8 +43,6 @@ export function ConsoleInterface() {
       const code = genData.data.code
       setGeneratedCode(code)
 
-      // 2. Compile for Preview (SVG)
-      // Note: Assuming /api/compile returns SVG in the response for preview
       const compileRes = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,10 +52,8 @@ export function ConsoleInterface() {
       if (compileRes.ok) {
         const compileData = await compileRes.json()
         if (compileData.success && compileData.data) {
-          // Save circuitJson for later use in downloads
           setCircuitJson(compileData.data.circuitJson)
 
-          // Set both PCB and schematic SVGs
           if (compileData.data.pcbSvg) {
             setPcbSvg(compileData.data.pcbSvg)
           }
@@ -104,7 +101,6 @@ export function ConsoleInterface() {
         throw new Error(errorData.error || errorData.message || `Failed to download ${type}`)
       }
 
-      // Get the filename from Content-Disposition header or use default
       const contentDisposition = res.headers.get('Content-Disposition')
       let filename = `design_${type}.txt`
 
@@ -130,6 +126,45 @@ export function ConsoleInterface() {
     }
   }
 
+  const handleExport = async () => {
+    if (!prompt.trim()) return
+
+    setIsProcessing(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          options: workspace ? { workspace } : {},
+        }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(errorData.error?.message || 'Export failed')
+      }
+
+      const data = await res.json()
+
+      if (data.success) {
+        if (data.versionId) {
+          alert(`已保存版本: ${data.versionId}`)
+        } else {
+          alert('导出成功（临时模式）')
+        }
+      } else {
+        throw new Error(data.error?.message || 'Export failed')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   return (
     <div className="console-interface">
       <header className="console-header">
@@ -141,6 +176,8 @@ export function ConsoleInterface() {
         </div>
         <h2>AI 电路设计器</h2>
       </header>
+
+      <WorkspaceSelector onWorkspaceSelect={setWorkspace} currentWorkspace={workspace} />
 
       <div className="main-layout">
         <div className="left-panel">
@@ -226,6 +263,16 @@ export function ConsoleInterface() {
             <div className="actions-section">
               <div className="section-title">导出文件</div>
               <div className="button-group">
+                {workspace && (
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    className="action-btn primary"
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? '处理中...' : '保存到工作空间'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleDownload('kicad')}

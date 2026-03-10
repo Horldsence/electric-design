@@ -164,6 +164,7 @@ export async function autoFixValidationErrors(
   const log = createPipelineLogger('kicad-autofix', sessionId || 'unknown')
   const maxRetries = options.maxRetries ?? 3
   const _includeWarnings = options.includeWarnings ?? false
+  void _includeWarnings // Keep for potential future use
 
   const result: AutoFixResult = {
     fixed: false,

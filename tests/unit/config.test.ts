@@ -10,6 +10,7 @@ import {
 
 describe('Config Module', () => {
   const _originalEnv = { ...process.env }
+  void _originalEnv // Keep for potential cleanup
 
   beforeEach(() => {
     resetConfig()

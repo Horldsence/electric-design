@@ -1,6 +1,5 @@
 import type { AnyCircuitElement } from 'circuit-json'
-// @ts-ignore
-import { svgCache } from '../cache/svg-cache'
+import { circuitJsonToPcbSvg, circuitJsonToSchematicSvg } from '../../lib/circuit-to-svg-wrapper'
 import { createPipelineLogger } from '../../lib/debug'
 import { FileManager } from '../../lib/file-manager'
 import type { DrcResult, ErcResult } from '../../types/kicad'
@@ -199,7 +198,7 @@ export async function runPipeline(
                   `${sessionId}_final`,
                   autoFixResult.fixedCode || '',
                 )
-                circuitJson = fixedCircuitJson as AnyCircuitElement[];
+                circuitJson = fixedCircuitJson as AnyCircuitElement[]
                 kicadFiles = convertToKiCad(fixedCircuitJson)
                 compilerService.cleanup(`${sessionId}_final`)
               } else {
@@ -275,7 +274,7 @@ export async function runPipeline(
                   `${sessionId}_final`,
                   autoFixResult.fixedCode || '',
                 )
-                circuitJson = fixedCircuitJson as AnyCircuitElement[];
+                circuitJson = fixedCircuitJson as AnyCircuitElement[]
                 kicadFiles = convertToKiCad(fixedCircuitJson)
                 compilerService.cleanup(`${sessionId}_final`)
               } else {
@@ -319,19 +318,21 @@ export async function runPipeline(
           kicadFiles,
           {
             ...options,
-            runErc: false, // Already done above
-            runDrc: false, // Already done above
+            runErc: false,
+            runDrc: false,
           },
           sessionId,
         )
       : undefined
 
     const previewCircuitJson = circuitJson as AnyCircuitElement[]
-    const { pcbSvg, schematicSvg } = svgCache.getSvgs(
-      autoFixResult?.fixedCode || generationResult.code,
-      previewCircuitJson,
-      log
-    )
+    const pcbSvg = circuitJsonToPcbSvg(previewCircuitJson)
+    let schematicSvg: string | null = null
+    try {
+      schematicSvg = circuitJsonToSchematicSvg(previewCircuitJson)
+    } catch (error) {
+      log.warn('Failed to generate schematic SVG', error)
+    }
 
     const artifacts = {
       ...(postProcessArtifacts || {}),
@@ -357,8 +358,12 @@ export async function runPipeline(
           pcb: kicadFiles.pcb,
           sch: kicadFiles.sch,
         },
+        artifacts: {
+          pcbSvg,
+          schematicSvg: schematicSvg || undefined,
+        },
       })
-      log.info('Version saved', { versionId })
+      log.info('Version saved', { versionId, hasArtifacts: true })
     }
 
     return {

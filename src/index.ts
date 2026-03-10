@@ -13,6 +13,7 @@ import {
 } from './routes/download'
 import { POST as exportPost } from './routes/export'
 import { POST as generatePost } from './routes/generate'
+import { POST as openFolderPost } from './routes/open-folder'
 import {
   autoFixValidation,
   checkKiCad,
@@ -110,6 +111,10 @@ const server = serve<WebSocketData>({
 
     '/api/download-bom': {
       POST: downloadBomFile,
+    },
+
+    '/api/open-folder': {
+      POST: openFolderPost,
     },
   },
 

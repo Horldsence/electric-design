@@ -1,6 +1,6 @@
 export type CompilationError = {
-  type: 'syntax' | 'runtime' | 'circuit'
-  messageType: 'javascript_error' | 'circuit_error'
+  type: 'syntax' | 'runtime' | 'circuit' | 'abort'
+  messageType: 'javascript_error' | 'circuit_error' | 'abort'
   message: string
   location?: {
     line?: number

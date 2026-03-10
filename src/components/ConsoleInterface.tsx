@@ -1,13 +1,14 @@
 import type { AnyCircuitElement } from 'circuit-json'
 import type React from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSocket from '../hooks/use-socket'
+import type { PipelineStage } from '../lib/pipeline-progress'
 import { LogViewer } from './LogViewer'
 import { SchematicViewer } from './SchematicViewer'
 import { WorkspaceSelector } from './WorkspaceSelector'
 
 export function ConsoleInterface() {
-  const { logs, status, clearLogs } = useSocket()
+  const { logs, status, clearLogs, onProgress } = useSocket()
   const [workspace, setWorkspace] = useState<string | null>('./projects/default-workspace')
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -19,18 +20,33 @@ export function ConsoleInterface() {
   const [schematicSvg, setSchematicSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [kicadFiles, setKicadFiles] = useState<{ pcb: string; sch: string } | null>(null)
-  const [requestStage, setRequestStage] = useState<
+  const [_kicadFiles, setKicadFiles] = useState<{ pcb: string; sch: string } | null>(null)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
+  type RequestStage =
     | 'idle'
     | 'requesting'
     | 'ai-processing'
     | 'compiling'
     | 'validating'
+    | 'converting'
     | 'fixing'
     | 'rendering'
     | 'completed'
     | 'failed'
-  >('idle')
+
+  const [requestStage, setRequestStageRaw] = useState<RequestStage>('idle')
+  const requestStageRef = useRef<RequestStage>('idle')
+
+  // The sessionId of the currently active pipeline request.
+  // Only progress events matching this id are allowed to drive state.
+  const sessionIdRef = useRef<string | null>(null)
+
+  // Wrapper that keeps ref in sync with state, so async code and effects
+  // always see the latest value without stale-closure issues.
+  const setRequestStage = useCallback((stage: RequestStage) => {
+    requestStageRef.current = stage
+    setRequestStageRaw(stage)
+  }, [])
 
   const applyPipelineResult = (data: {
     circuitJson?: AnyCircuitElement[]
@@ -65,197 +81,88 @@ export function ConsoleInterface() {
     }
   }
 
+  // ── Stage label lookup ──────────────────────────────────────────
+  // A plain map from PipelineStage → display info.  No string matching,
+  // no log scanning, no heuristics.  The stage value comes from a typed
+  // WebSocket event or from an explicit setRequestStage() call.
+  const stageDisplay: Record<
+    RequestStage,
+    { label: string; detail: string; tone: 'idle' | 'info' | 'warning' | 'error' | 'success' }
+  > = {
+    idle:          { label: '准备就绪',   detail: '输入需求后即可开始生成电路',         tone: 'idle' },
+    requesting:    { label: '发送请求中', detail: '正在提交设计请求到后端',             tone: 'info' },
+    'ai-processing': { label: 'AI 处理中', detail: '正在生成电路代码',                 tone: 'info' },
+    compiling:     { label: '代码编译中', detail: '正在编译电路代码',                   tone: 'info' },
+    validating:    { label: '检查中',     detail: '正在执行电路校验',                   tone: 'warning' },
+    converting:    { label: '导出中',     detail: '正在转换为 KiCad 格式',              tone: 'info' },
+    fixing:        { label: 'AI 修复中', detail: '检测到问题，正在尝试自动修复',        tone: 'warning' },
+    rendering:     { label: '渲染中',     detail: '正在生成 PCB / 原理图预览',          tone: 'info' },
+    completed:     { label: '渲染完成',   detail: '预览已准备就绪',                     tone: 'success' },
+    failed:        { label: '检查到错误', detail: '流程中断，请查看错误信息',            tone: 'error' },
+  }
+
   const progressState = useMemo(() => {
-    const recentLogs = logs.slice(-20)
-
     if (error) {
-      return {
-        label: '处理失败',
-        detail: error,
-        tone: 'error' as const,
-      }
+      return { label: '处理失败', detail: error, tone: 'error' as const }
     }
+    const entry = stageDisplay[requestStage]
+    return { label: entry.label, detail: entry.detail, tone: entry.tone }
+  }, [requestStage, error])
 
-    for (let i = recentLogs.length - 1; i >= 0; i--) {
-      const log = recentLogs[i]
-      if (!log) continue
-      const context = log.context.toLowerCase()
-      const message = log.message.toLowerCase()
-
-      if (log.level === 'error') {
-        return {
-          label: '检查到错误',
-          detail: `${log.context}：${log.message}`,
-          tone: 'error' as const,
-        }
-      }
-
-      if (context.includes('autofix') || message.includes('auto-fix')) {
-        return {
-          label: 'AI 修复中',
-          detail: `${log.context}：${log.message}`,
-          tone: 'warning' as const,
-        }
-      }
-
-      if (context.includes('validation') || context.includes('erc') || context.includes('drc')) {
-        return {
-          label: '检查中',
-          detail: `${log.context}：${log.message}`,
-          tone: 'warning' as const,
-        }
-      }
-
-      if (context.includes('compile') || message.includes('compilation')) {
-        return {
-          label: '代码编译中',
-          detail: `${log.context}：${log.message}`,
-          tone: 'info' as const,
-        }
-      }
-
-      if (
-        context.includes('ai-generation') ||
-        context.includes('llm') ||
-        message.includes('calling llm') ||
-        message.includes('llm response received')
-      ) {
-        return {
-          label: 'AI 处理中',
-          detail: `${log.context}：${log.message}`,
-          tone: 'info' as const,
-        }
-      }
-
-      if (context.includes('postprocess') || message.includes('schematic svg') || message.includes('render')) {
-        return {
-          label: '渲染中',
-          detail: `${log.context}：${log.message}`,
-          tone: 'info' as const,
-        }
-      }
-    }
-
-    switch (requestStage) {
-      case 'requesting':
-        return {
-          label: '发送请求中',
-          detail: '正在提交设计请求到后端',
-          tone: 'info' as const,
-        }
-      case 'ai-processing':
-        return {
-          label: 'AI 处理中',
-          detail: '正在生成电路代码',
-          tone: 'info' as const,
-        }
-      case 'compiling':
-        return {
-          label: '代码编译中',
-          detail: '正在编译并分析电路代码',
-          tone: 'info' as const,
-        }
-      case 'validating':
-        return {
-          label: '检查中',
-          detail: '正在执行电路校验与导出检查',
-          tone: 'warning' as const,
-        }
-      case 'fixing':
-        return {
-          label: 'AI 修复中',
-          detail: '检测到问题，正在尝试自动修复',
-          tone: 'warning' as const,
-        }
-      case 'rendering':
-        return {
-          label: '渲染中',
-          detail: '正在生成 PCB / 原理图预览',
-          tone: 'info' as const,
-        }
-      case 'completed':
-        return {
-          label: '渲染完成',
-          detail: '预览已准备就绪',
-          tone: 'success' as const,
-        }
-      case 'failed':
-        return {
-          label: '检查到错误',
-          detail: '流程中断，请查看错误信息',
-          tone: 'error' as const,
-        }
-      default:
-        return {
-          label: '准备就绪',
-          detail: '输入需求后即可开始生成电路',
-          tone: 'idle' as const,
-        }
-    }
-  }, [logs, requestStage, error])
-
+  // ── Subscribe to structured pipeline progress events ────────────
+  // Only events whose sessionId matches our current request are accepted.
+  // This replaces the old log-scanning useEffect entirely.
   useEffect(() => {
-    if (isProcessing && (pcbSvg || schematicSvg)) {
-      setRequestStage('rendering')
-    }
-  }, [isProcessing, pcbSvg, schematicSvg])
+    const unsub = onProgress((event) => {
+      console.debug('[onProgress] received', {
+        eventSessionId: event.sessionId,
+        stage: event.stage,
+        detail: event.detail,
+        activeSessionId: sessionIdRef.current,
+        currentStage: requestStageRef.current,
+      })
 
-  useEffect(() => {
-    if (!isProcessing && !error && (pcbSvg || schematicSvg)) {
-      setRequestStage('completed')
-    }
-  }, [isProcessing, error, pcbSvg, schematicSvg])
+      // Ignore events from other sessions (e.g. a stale compilation)
+      if (event.sessionId !== sessionIdRef.current) {
+        console.debug('[onProgress] IGNORED — sessionId mismatch', {
+          expected: sessionIdRef.current,
+          got: event.sessionId,
+        })
+        return
+      }
 
-  useEffect(() => {
-    if (error) {
-      setRequestStage('failed')
-      return
-    }
+      // Never regress from terminal states — HTTP response owns those
+      const cur = requestStageRef.current
+      if (cur === 'completed' || cur === 'failed' || cur === 'idle') {
+        console.debug('[onProgress] IGNORED — already in terminal state', { cur })
+        return
+      }
 
-    const lastLog = logs[logs.length - 1]
-    if (!isProcessing || !lastLog) return
-
-    const context = lastLog.context.toLowerCase()
-    const message = lastLog.message.toLowerCase()
-
-    if (lastLog.level === 'error') {
-      setRequestStage('failed')
-      return
-    }
-
-    if (context.includes('autofix') || message.includes('auto-fix')) {
-      setRequestStage('fixing')
-      return
-    }
-
-    if (context.includes('validation') || context.includes('erc') || context.includes('drc')) {
-      setRequestStage('validating')
-      return
-    }
-
-    if (context.includes('compile') || message.includes('compilation')) {
-      setRequestStage('compiling')
-      return
-    }
-
-    if (
-      context.includes('ai-generation') ||
-      context.includes('llm') ||
-      message.includes('calling llm') ||
-      message.includes('llm response received')
-    ) {
-      setRequestStage('ai-processing')
-      return
-    }
-
-    if (context.includes('postprocess') || message.includes('schematic svg') || message.includes('render')) {
-      setRequestStage('rendering')
-    }
-  }, [logs, isProcessing, error])
+      // Map PipelineStage → RequestStage (they overlap by design)
+      const mapped: Record<PipelineStage, RequestStage> = {
+        compiling:  'compiling',
+        validating: 'validating',
+        converting: 'converting',
+        rendering:  'rendering',
+        completed:  'completed',
+        failed:     'failed',
+      }
+      const next = mapped[event.stage]
+      if (next) {
+        console.debug('[onProgress] transitioning', { from: cur, to: next })
+        setRequestStage(next)
+      }
+    })
+    return unsub
+  }, [onProgress, setRequestStage])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!prompt.trim()) return
+
+    const sid = `compile_${Date.now()}`
+    sessionIdRef.current = sid
+    console.debug('[handleSubmit] start', { sid })
 
     setIsProcessing(true)
     setError(null)
@@ -277,12 +184,15 @@ export function ConsoleInterface() {
       if (!genRes.ok) throw new Error('Generation failed')
 
       setRequestStage('ai-processing')
+      console.debug('[handleSubmit] ai-processing', { sid })
       const genData = await genRes.json()
       if (!genData.success) throw new Error(genData.error?.message || 'Generation failed')
 
       const code = genData.data.code
       setGeneratedCode(code)
-      setRequestStage(workspace ? 'validating' : 'compiling')
+      const nextStage = workspace ? 'validating' : 'compiling'
+      console.debug('[handleSubmit] code received, transitioning', { sid, nextStage })
+      setRequestStage(nextStage)
 
       if (workspace) {
         const exportRes = await fetch('/api/export', {
@@ -305,93 +215,194 @@ export function ConsoleInterface() {
           setRefreshKey(prev => prev + 1)
         }
 
-        setRequestStage('rendering')
         applyPipelineResult(exportData.data)
+        setRequestStage('completed')
       } else {
+        console.debug('[handleSubmit] fetching /api/compile-and-convert', { sid })
         const compileRes = await fetch('/api/compile-and-convert', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, sessionId: sid }),
         })
 
         const compileData = await compileRes.json().catch(() => ({ error: 'Unknown error' }))
+        console.debug('[handleSubmit] compile-and-convert response', {
+          sid,
+          ok: compileRes.ok,
+          success: compileData.success,
+          responseSessionId: compileData.sessionId,
+        })
 
         if (!compileRes.ok || !compileData.success || !compileData.data) {
           throw new Error(compileData.error?.message || 'Compilation failed')
         }
 
-        setRequestStage('rendering')
-        setCircuitJson(compileData.data.circuitJson)
-        setKicadFiles(compileData.data.kicadFiles ?? null)
-
-        if (compileData.data.pcbSvg) {
-          setPcbSvg(compileData.data.pcbSvg)
-        }
-        if (compileData.data.schematicSvg) {
-          setSchematicSvg(compileData.data.schematicSvg)
-        }
+        applyPipelineResult(compileData.data)
+        console.debug('[handleSubmit] setting completed', { sid })
+        setRequestStage('completed')
       }
     } catch (err) {
+      console.debug('[handleSubmit] error', { sid, error: err instanceof Error ? err.message : err })
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
     } finally {
+      console.debug('[handleSubmit] finally', { sid, currentStage: requestStageRef.current })
       setIsProcessing(false)
+      sessionIdRef.current = null
     }
   }
 
-  const handleDownload = async (type: 'kicad' | 'gerber' | 'bom') => {
-    if (!circuitJson) {
-      alert('请先生成电路')
+  const handleRenderSvg = async () => {
+    if (!generatedCode) {
+      alert('请先生成电路代码')
+      return
+    }
+
+    const sid = `compile_${Date.now()}`
+    sessionIdRef.current = sid
+    console.debug('[handleRenderSvg] start', { sid })
+
+    const controller = new AbortController()
+    setAbortController(controller)
+    setIsProcessing(true)
+    setError(null)
+    setRequestStage('compiling')
+
+    try {
+      console.debug('[handleRenderSvg] fetching /api/compile-and-convert', { sid })
+      const compileRes = await fetch('/api/compile-and-convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: generatedCode, sessionId: sid }),
+        signal: controller.signal,
+      })
+
+      const compileData = await compileRes.json().catch(() => ({ error: 'Unknown error' }))
+      console.debug('[handleRenderSvg] compile-and-convert response', {
+        sid,
+        ok: compileRes.ok,
+        success: compileData.success,
+        responseSessionId: compileData.sessionId,
+      })
+
+      if (!compileRes.ok || !compileData.success || !compileData.data) {
+        throw new Error(compileData.error?.message || 'Compilation failed')
+      }
+
+      console.debug('[handleRenderSvg] setting completed', { sid })
+      setRequestStage('completed')
+      setCircuitJson(compileData.data.circuitJson)
+      setKicadFiles(compileData.data.kicadFiles ?? null)
+
+      const pcbSvg = compileData.data.artifacts?.pcbSvg
+      const schematicSvg = compileData.data.artifacts?.schematicSvg
+
+      if (pcbSvg) {
+        setPcbSvg(pcbSvg)
+      }
+      if (schematicSvg) {
+        setSchematicSvg(schematicSvg)
+      }
+
+      setSuccessMessage('SVG渲染完成')
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setRequestStage('idle')
+        setError(null)
+        setSuccessMessage('已取消')
+        setTimeout(() => setSuccessMessage(null), 2000)
+      } else {
+        setRequestStage('failed')
+        setError(err instanceof Error ? err.message : '渲染失败')
+        setSuccessMessage(null)
+      }
+    } finally {
+      console.debug('[handleRenderSvg] finally', { sid, currentStage: requestStageRef.current })
+      setIsProcessing(false)
+      setAbortController(null)
+      sessionIdRef.current = null
+    }
+  }
+
+  const handleCancel = () => {
+    if (abortController) {
+      abortController.abort()
+    }
+  }
+
+  const handleCompileCode = async () => {
+    if (!generatedCode) {
+      alert('请先生成电路代码')
+      return
+    }
+
+    const sid = `compile_${Date.now()}`
+    sessionIdRef.current = sid
+    console.debug('[handleCompileCode] start', { sid })
+
+    setIsProcessing(true)
+    setError(null)
+    setRequestStage('compiling')
+
+    try {
+      console.debug('[handleCompileCode] fetching /api/compile', { sid })
+      const compileRes = await fetch('/api/compile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: generatedCode, sessionId: sid }),
+      })
+
+      const compileData = await compileRes.json().catch(() => ({ error: 'Unknown error' }))
+      console.debug('[handleCompileCode] compile response', {
+        sid,
+        ok: compileRes.ok,
+        success: compileData.success,
+        responseSessionId: compileData.sessionId,
+      })
+
+      if (!compileRes.ok || !compileData.success) {
+        throw new Error(compileData.error?.message || 'Compilation failed')
+      }
+
+      console.debug('[handleCompileCode] setting completed', { sid })
+      setRequestStage('completed')
+      setSuccessMessage(`编译成功: ${compileData.data?.circuitJson?.length || 0} 个元素`)
+    } catch (err) {
+      console.debug('[handleCompileCode] error', { sid, error: err instanceof Error ? err.message : err })
+      setRequestStage('failed')
+      setError(err instanceof Error ? err.message : '编译失败')
+      setSuccessMessage(null)
+    } finally {
+      console.debug('[handleCompileCode] finally', { sid, currentStage: requestStageRef.current })
+      setIsProcessing(false)
+      sessionIdRef.current = null
+    }
+  }
+
+  const handleOpenFolder = async () => {
+    if (!workspace) {
+      alert('请先选择工作空间')
       return
     }
 
     try {
-      let endpoint = ''
-
-      switch (type) {
-        case 'kicad':
-          endpoint = '/api/download-kicad'
-          break
-        case 'gerber':
-          endpoint = '/api/download-gerbers'
-          break
-        case 'bom':
-          endpoint = '/api/download-bom'
-          break
-      }
-
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/open-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ circuitJson }),
+        body: JSON.stringify({ path: workspace }),
       })
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errorData.error || errorData.message || `Failed to download ${type}`)
+        throw new Error(errorData.error?.message || 'Failed to open folder')
       }
 
-      const contentDisposition = res.headers.get('Content-Disposition')
-      let filename = `design_${type}.txt`
-
-      if (contentDisposition) {
-        const matches = /filename="([^"]+)"/.exec(contentDisposition)
-        if (matches?.[1]) {
-          filename = matches[1]
-        }
+      const data = await res.json()
+      if (!data.success) {
+        throw new Error(data.error?.message || 'Failed to open folder')
       }
-
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
     } catch (err) {
       console.error(err)
-      alert(`下载失败 ${type}: ${err instanceof Error ? err.message : '未知错误'}`)
+      alert(`打开文件夹失败: ${err instanceof Error ? err.message : '未知错误'}`)
     }
   }
 
@@ -399,50 +410,37 @@ export function ConsoleInterface() {
     if (!workspace) return
 
     setCurrentVersionId(versionId)
-    setIsProcessing(true)
     setError(null)
-    setSuccessMessage(`加载版本: ${versionId}...`)
+    setPcbSvg(null)
+    setSchematicSvg(null)
 
     try {
-      const res = await fetch(`/api/workspace?path=${encodeURIComponent(workspace)}&versionId=${versionId}`)
+      const res = await fetch(
+        `/api/workspace?path=${encodeURIComponent(workspace)}&versionId=${versionId}`,
+      )
       const data = await res.json().catch(() => ({ error: 'Unknown error' }))
 
       if (!res.ok || !data.success) {
         throw new Error(data.error?.message || 'Failed to load version')
       }
 
-      const { code } = data.data
+      const { code, artifacts } = data.data
       setGeneratedCode(code)
 
-      const compileRes = await fetch('/api/compile-and-convert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      })
-
-      const compileData = await compileRes.json().catch(() => ({ error: 'Unknown error' }))
-
-      if (!compileRes.ok || !compileData.success || !compileData.data) {
-        throw new Error(compileData.error?.message || 'Compilation failed')
+      if (artifacts && (artifacts.pcbSvg || artifacts.schematicSvg)) {
+        setPcbSvg(artifacts.pcbSvg || null)
+        setSchematicSvg(artifacts.schematicSvg || null)
+        setRequestStage('completed')
+        setSuccessMessage(`已加载版本: ${versionId} (使用缓存)`)
+      } else {
+        setRequestStage('idle')
+        setSuccessMessage(`已加载版本: ${versionId} (无缓存，点击"渲染SVG"生成预览)`)
+        setTimeout(() => setSuccessMessage(null), 5000)
       }
-
-      setRequestStage('completed')
-      setCircuitJson(compileData.data.circuitJson)
-      setKicadFiles(compileData.data.kicadFiles ?? null)
-
-      if (compileData.data.pcbSvg) {
-        setPcbSvg(compileData.data.pcbSvg)
-      }
-      if (compileData.data.schematicSvg) {
-        setSchematicSvg(compileData.data.schematicSvg)
-      }
-      setSuccessMessage(`已加载版本: ${versionId}`)
     } catch (err) {
       setRequestStage('failed')
       setError(err instanceof Error ? err.message : '加载版本失败')
       setSuccessMessage(null)
-    } finally {
-      setIsProcessing(false)
     }
   }
 
@@ -458,9 +456,9 @@ export function ConsoleInterface() {
         <h2>AI 电路设计器</h2>
       </header>
 
-      <WorkspaceSelector 
-        onWorkspaceSelect={setWorkspace} 
-        currentWorkspace={workspace} 
+      <WorkspaceSelector
+        onWorkspaceSelect={setWorkspace}
+        currentWorkspace={workspace}
         onVersionSelect={handleVersionSelect}
         onNewVersion={() => {
           setCurrentVersionId(null)
@@ -484,9 +482,20 @@ export function ConsoleInterface() {
                 className="prompt-input"
               />
             </div>
-            <button type="submit" disabled={isProcessing || !prompt.trim()} className="submit-btn">
-              {isProcessing ? '处理中...' : '生成电路'}
-            </button>
+            <div className="button-group">
+              <button
+                type="submit"
+                disabled={isProcessing || !prompt.trim()}
+                className="submit-btn"
+              >
+                {isProcessing ? '处理中...' : '生成电路'}
+              </button>
+              {isProcessing && (
+                <button type="button" className="submit-btn danger" onClick={handleCancel}>
+                  中断
+                </button>
+              )}
+            </div>
           </form>
 
           {successMessage && (
@@ -505,11 +514,7 @@ export function ConsoleInterface() {
           {error && !isProcessing && (
             <div className="inline-notice error">
               <span>{error}</span>
-              <button
-                type="button"
-                className="inline-notice-close"
-                onClick={() => setError(null)}
-              >
+              <button type="button" className="inline-notice-close" onClick={() => setError(null)}>
                 关闭
               </button>
             </div>
@@ -554,28 +559,31 @@ export function ConsoleInterface() {
 
           {generatedCode && (
             <div className="actions-section">
-              <div className="section-title">导出文件</div>
+              <div className="section-title">操作</div>
               <div className="button-group">
                 <button
                   type="button"
-                  onClick={() => handleDownload('kicad')}
+                  onClick={handleRenderSvg}
                   className="action-btn"
+                  disabled={isProcessing}
                 >
-                  下载 KiCad PCB
+                  渲染 SVG
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDownload('gerber')}
+                  onClick={handleCompileCode}
                   className="action-btn secondary"
+                  disabled={isProcessing}
                 >
-                  下载 Gerber 文件
+                  编译代码
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDownload('bom')}
+                  onClick={handleOpenFolder}
                   className="action-btn secondary"
+                  disabled={!workspace}
                 >
-                  下载物料清单
+                  打开项目文件夹
                 </button>
               </div>
             </div>
@@ -705,6 +713,24 @@ export function ConsoleInterface() {
           background: #444;
           color: #888;
           cursor: not-allowed;
+        }
+
+        .submit-btn.danger {
+          background: #f44336;
+          color: #fff;
+        }
+
+        .submit-btn.danger:hover:not(:disabled) {
+          background: #d32f2f;
+        }
+
+        .button-group {
+          display: flex;
+          gap: 10px;
+        }
+
+        .button-group .submit-btn {
+          flex: 1;
         }
 
         .logs-section {

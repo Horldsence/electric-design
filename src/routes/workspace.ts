@@ -186,8 +186,12 @@ export async function GET(req: Request) {
     }
 
     if (versionId) {
-      const code = await fileManager.readVersionCode(versionId)
-      if (code === null) {
+      const [code, artifacts] = await Promise.all([
+        fileManager.readVersionCode(versionId),
+        fileManager.readVersionArtifacts(versionId),
+      ])
+
+      if (code === null && artifacts === null) {
         return Response.json(
           {
             success: false,
@@ -202,7 +206,11 @@ export async function GET(req: Request) {
 
       return Response.json({
         success: true,
-        data: { code, versionId },
+        data: {
+          code,
+          versionId,
+          artifacts: artifacts || undefined,
+        },
       })
     }
 

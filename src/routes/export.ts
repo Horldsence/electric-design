@@ -55,6 +55,13 @@ export async function POST(req: Request) {
     let workspaceMeta: Awaited<ReturnType<FileManager['getMeta']>> | undefined
 
     if (fileManager) {
+      const artifacts = result.data.artifacts
+        ? {
+            pcbSvg: result.data.artifacts.pcbSvg || undefined,
+            schematicSvg: result.data.artifacts.schematicSvg || undefined,
+          }
+        : undefined
+
       versionId = await fileManager.saveGeneratedResult({
         path: workspacePath,
         code: generationResult.code,
@@ -62,6 +69,7 @@ export async function POST(req: Request) {
         kicadFiles: result.data.kicadFiles,
         isValid: true,
         versionId: targetVersionId,
+        artifacts,
       })
 
       workspaceMeta = await fileManager.getMeta()

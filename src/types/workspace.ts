@@ -7,6 +7,11 @@
  * - Timestamp as version ID
  */
 
+export interface WorkspaceArtifacts {
+  pcbSvg?: string
+  schematicSvg?: string
+}
+
 export interface WorkspaceVersion {
   id: string // format: "20260310_143052"
   prompt: string
@@ -17,6 +22,7 @@ export interface WorkspaceVersion {
     pcb: string
     sch: string
   }
+  artifacts?: WorkspaceArtifacts
 }
 
 export interface WorkspaceMeta {
@@ -36,6 +42,7 @@ export interface CreateVersionOptions {
     pcb: string
     sch: string
   }
+  artifacts?: WorkspaceArtifacts
 }
 
 export interface SaveWorkspaceResultRequest {
@@ -49,6 +56,7 @@ export interface SaveWorkspaceResultRequest {
     pcb: string
     sch: string
   }
+  artifacts?: WorkspaceArtifacts
 }
 
 export interface InitWorkspaceOptions {

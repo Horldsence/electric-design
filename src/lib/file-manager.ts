@@ -64,7 +64,7 @@ export class FileManager {
   }
 
   async createVersion(options: CreateVersionOptions): Promise<string> {
-    const { code, prompt, timestamp, isValid, kicadFiles } = options
+    const { code, prompt, timestamp, isValid, kicadFiles, artifacts } = options
 
     const versionId = this.formatTimestamp(timestamp)
     const versionDir = join(this.versionsDir, versionId)
@@ -72,6 +72,16 @@ export class FileManager {
 
     await mkdir(versionDir, { recursive: true })
     await writeFile(codeFilePath, code, 'utf-8')
+
+    // Save cached SVG artifacts if available
+    if (artifacts) {
+      if (artifacts.pcbSvg) {
+        await writeFile(join(versionDir, 'pcb.svg'), artifacts.pcbSvg, 'utf-8')
+      }
+      if (artifacts.schematicSvg) {
+        await writeFile(join(versionDir, 'schematic.svg'), artifacts.schematicSvg, 'utf-8')
+      }
+    }
 
     const relativeCodePath = `.eai/versions/${versionId}/code.tsx`
 
@@ -82,6 +92,7 @@ export class FileManager {
       timestamp,
       isValid,
       kicadFiles,
+      artifacts,
     }
 
     await this.updateMeta(meta => ({
@@ -95,22 +106,45 @@ export class FileManager {
       await this.writeKiCadFiles(kicadFiles.pcb, kicadFiles.sch)
     }
 
-    logger.info('version-created', `Version ${versionId} created`, { versionId, isValid })
+    logger.info('version-created', `Version ${versionId} created`, {
+      versionId,
+      isValid,
+      hasArtifacts: !!artifacts,
+    })
 
     return versionId
   }
 
   async saveGeneratedResult(options: SaveWorkspaceResultRequest): Promise<string> {
-    const { code, prompt, kicadFiles, timestamp = Date.now(), isValid = true, versionId } = options
+    const {
+      code,
+      prompt,
+      kicadFiles,
+      timestamp = Date.now(),
+      isValid = true,
+      versionId,
+      artifacts,
+    } = options
 
     if (versionId) {
       await this.updateVersionCode(versionId, code, isValid)
       if (kicadFiles) {
         await this.writeKiCadFiles(kicadFiles.pcb, kicadFiles.sch)
       }
+      if (artifacts) {
+        const versionDir = join(this.versionsDir, versionId)
+        if (artifacts.pcbSvg) {
+          await writeFile(join(versionDir, 'pcb.svg'), artifacts.pcbSvg, 'utf-8')
+        }
+        if (artifacts.schematicSvg) {
+          await writeFile(join(versionDir, 'schematic.svg'), artifacts.schematicSvg, 'utf-8')
+        }
+      }
       await this.updateMeta(meta => ({
         ...meta,
-        versions: meta.versions.map(v => (v.id === versionId ? { ...v, prompt, kicadFiles, timestamp } : v)),
+        versions: meta.versions.map(v =>
+          v.id === versionId ? { ...v, prompt, kicadFiles, timestamp, artifacts } : v,
+        ),
         lastModified: Date.now(),
       }))
       return versionId
@@ -122,6 +156,7 @@ export class FileManager {
       timestamp,
       isValid,
       kicadFiles,
+      artifacts,
     })
   }
 
@@ -207,6 +242,27 @@ export class FileManager {
 
     try {
       return await readFile(codePath, 'utf-8')
+    } catch {
+      return null
+    }
+  }
+
+  async readVersionArtifacts(
+    versionId: string,
+  ): Promise<{ pcbSvg?: string; schematicSvg?: string } | null> {
+    const versionDir = join(this.versionsDir, versionId)
+
+    try {
+      const [pcbSvg, schematicSvg] = await Promise.all([
+        readFile(join(versionDir, 'pcb.svg'), 'utf-8').catch(() => null),
+        readFile(join(versionDir, 'schematic.svg'), 'utf-8').catch(() => null),
+      ])
+
+      if (!pcbSvg && !schematicSvg) {
+        return null
+      }
+
+      return { pcbSvg: pcbSvg || undefined, schematicSvg: schematicSvg || undefined }
     } catch {
       return null
     }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LogEntry } from '../lib/logger'
+import type { PipelineProgressEvent } from '../lib/pipeline-progress'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -8,6 +9,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | undefined
 let deferredCloseTimer: ReturnType<typeof setTimeout> | undefined
 let hasConnectedOnce = false
 const logListeners = new Set<(entry: LogEntry) => void>()
+const progressListeners = new Set<(event: PipelineProgressEvent) => void>()
 const statusListeners = new Set<(status: ConnectionStatus) => void>()
 
 const notifyStatus = (status: ConnectionStatus) => {
@@ -42,6 +44,10 @@ const connectSharedSocket = () => {
       const message = JSON.parse(event.data)
       if (message.type === 'log') {
         logListeners.forEach(listener => listener(message.payload as LogEntry))
+      } else if (message.type === 'pipeline:progress') {
+        progressListeners.forEach(listener =>
+          listener(message.payload as PipelineProgressEvent),
+        )
       }
     } catch (e) {
       console.error('Failed to parse WebSocket message', e)
@@ -94,11 +100,20 @@ export default function useSocket() {
       logListeners.delete(handleLog)
       statusListeners.delete(handleStatus)
 
-      if (logListeners.size === 0 && statusListeners.size === 0) {
+      if (
+        logListeners.size === 0 &&
+        progressListeners.size === 0 &&
+        statusListeners.size === 0
+      ) {
         clearTimeout(reconnectTimer)
         clearTimeout(deferredCloseTimer)
         deferredCloseTimer = setTimeout(() => {
-          if (logListeners.size === 0 && statusListeners.size === 0 && sharedSocket) {
+          if (
+            logListeners.size === 0 &&
+            progressListeners.size === 0 &&
+            statusListeners.size === 0 &&
+            sharedSocket
+          ) {
             const ws = sharedSocket
             sharedSocket = null
             ws.close()
@@ -108,7 +123,21 @@ export default function useSocket() {
     }
   }, [])
 
+  /**
+   * Subscribe to pipeline progress events.
+   *
+   * Returns an unsubscribe function. The caller is responsible for
+   * filtering by sessionId — every progress event from every session
+   * is delivered to every subscriber.
+   */
+  const onProgress = (listener: (event: PipelineProgressEvent) => void) => {
+    progressListeners.add(listener)
+    return () => {
+      progressListeners.delete(listener)
+    }
+  }
+
   const clearLogs = () => setLogs([])
 
-  return { status, logs, clearLogs }
+  return { status, logs, clearLogs, onProgress }
 }

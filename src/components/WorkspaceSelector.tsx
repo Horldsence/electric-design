@@ -16,6 +16,7 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace, onVersi
   const [meta, setMeta] = useState<WorkspaceMeta | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   const handleLoadWorkspace = async () => {
     if (!workspacePath.trim()) {
@@ -102,12 +103,15 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace, onVersi
   }, [refreshKey])
 
   return (
-    <div className="workspace-selector">
-      <div className="workspace-header">
+    <div className={`workspace-selector ${isCollapsed ? 'collapsed' : ''}`}>
+      <div className="workspace-header" onClick={() => setIsCollapsed(!isCollapsed)}>
         <h3>工作空间</h3>
+        <span className="collapse-icon">{isCollapsed ? '▼' : '▲'}</span>
       </div>
 
-      <div className="workspace-input-group">
+      {!isCollapsed && (
+        <>
+          <div className="workspace-input-group">
         <input
           type="text"
           className="workspace-input"
@@ -157,13 +161,13 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace, onVersi
         </div>
       </div>
 
-      {error && (
-        <div className="workspace-error">
-          <span>{error}</span>
-        </div>
-      )}
+          {error && (
+            <div className="workspace-error">
+              <span>{error}</span>
+            </div>
+          )}
 
-      {meta && (
+          {meta && (
         <div className="workspace-info">
           <div className="workspace-info-item">
             <span className="label">名称:</span>
@@ -204,6 +208,8 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace, onVersi
             </div>
           )}
         </div>
+          )}
+        </>
       )}
 
       <style>{`
@@ -213,17 +219,35 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace, onVersi
           border-radius: 6px;
           padding: 16px;
           margin-bottom: 20px;
+          transition: all 0.3s ease;
+        }
+
+        .workspace-selector.collapsed {
+          margin-bottom: 10px;
+        }
+
+        .workspace-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          cursor: pointer;
         }
 
         .workspace-header h3 {
-          margin: 0 0 12px 0;
+          margin: 0;
           font-size: 0.85rem;
           color: #888;
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
 
+        .collapse-icon {
+          color: #888;
+          font-size: 0.8rem;
+        }
+
         .workspace-input-group {
+          margin-top: 12px;
           display: flex;
           flex-direction: column;
           gap: 10px;

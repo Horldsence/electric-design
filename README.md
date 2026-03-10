@@ -71,6 +71,7 @@ Today, the repository already includes a working backend service structure, a fr
 ### Example Interface
 
 ![Electric Design Example](images/example.png)
+![Electric Design Example](images/example2.png)
 
 ---
 

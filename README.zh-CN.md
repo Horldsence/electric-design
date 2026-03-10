@@ -76,6 +76,7 @@ Electric Design 是一个面向电路设计自动化的开源项目，构建于 
 ### 示例截图
 
 ![Electric Design Example](images/example.png)
+![Electric Design Example](images/example2.png)
 
 ---
 

@@ -56,6 +56,7 @@ const server = serve<WebSocketData>({
 
     '/api/workspace': {
       POST: (await import('./routes/workspace')).POST,
+      PUT: (await import('./routes/workspace')).PUT,
       GET: (await import('./routes/workspace')).GET,
     },
 

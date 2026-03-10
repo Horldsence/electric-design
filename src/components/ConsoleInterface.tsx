@@ -1,6 +1,6 @@
 import type { AnyCircuitElement } from 'circuit-json'
 import type React from 'react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import useSocket from '../hooks/use-socket'
 import { LogViewer } from './LogViewer'
 import { SchematicViewer } from './SchematicViewer'
@@ -16,6 +16,240 @@ export function ConsoleInterface() {
   const [pcbSvg, setPcbSvg] = useState<string | null>(null)
   const [schematicSvg, setSchematicSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [kicadFiles, setKicadFiles] = useState<{ pcb: string; sch: string } | null>(null)
+  const [requestStage, setRequestStage] = useState<
+    | 'idle'
+    | 'requesting'
+    | 'ai-processing'
+    | 'compiling'
+    | 'validating'
+    | 'fixing'
+    | 'rendering'
+    | 'completed'
+    | 'failed'
+  >('idle')
+
+  const applyPipelineResult = (data: {
+    circuitJson?: AnyCircuitElement[]
+    pcbSvg?: string
+    schematicSvg?: string
+    kicadFiles?: {
+      pcb: string
+      sch: string
+    }
+    artifacts?: {
+      pcbSvg?: string
+      schematicSvg?: string
+    }
+  }) => {
+    if (data.circuitJson) {
+      setCircuitJson(data.circuitJson)
+    }
+
+    if (data.kicadFiles?.pcb && data.kicadFiles?.sch) {
+      setKicadFiles(data.kicadFiles)
+    }
+
+    const nextPcbSvg = data.pcbSvg ?? data.artifacts?.pcbSvg
+    const nextSchematicSvg = data.schematicSvg ?? data.artifacts?.schematicSvg
+
+    if (nextPcbSvg) {
+      setPcbSvg(nextPcbSvg)
+    }
+
+    if (nextSchematicSvg) {
+      setSchematicSvg(nextSchematicSvg)
+    }
+  }
+
+  const progressState = useMemo(() => {
+    const recentLogs = logs.slice(-20)
+
+    if (error) {
+      return {
+        label: '处理失败',
+        detail: error,
+        tone: 'error' as const,
+      }
+    }
+
+    for (let i = recentLogs.length - 1; i >= 0; i--) {
+      const log = recentLogs[i]
+      if (!log) continue
+      const context = log.context.toLowerCase()
+      const message = log.message.toLowerCase()
+
+      if (log.level === 'error') {
+        return {
+          label: '检查到错误',
+          detail: `${log.context}：${log.message}`,
+          tone: 'error' as const,
+        }
+      }
+
+      if (context.includes('autofix') || message.includes('auto-fix')) {
+        return {
+          label: 'AI 修复中',
+          detail: `${log.context}：${log.message}`,
+          tone: 'warning' as const,
+        }
+      }
+
+      if (context.includes('validation') || context.includes('erc') || context.includes('drc')) {
+        return {
+          label: '检查中',
+          detail: `${log.context}：${log.message}`,
+          tone: 'warning' as const,
+        }
+      }
+
+      if (context.includes('compile') || message.includes('compilation')) {
+        return {
+          label: '代码编译中',
+          detail: `${log.context}：${log.message}`,
+          tone: 'info' as const,
+        }
+      }
+
+      if (
+        context.includes('ai-generation') ||
+        context.includes('llm') ||
+        message.includes('calling llm') ||
+        message.includes('llm response received')
+      ) {
+        return {
+          label: 'AI 处理中',
+          detail: `${log.context}：${log.message}`,
+          tone: 'info' as const,
+        }
+      }
+
+      if (context.includes('postprocess') || message.includes('schematic svg') || message.includes('render')) {
+        return {
+          label: '渲染中',
+          detail: `${log.context}：${log.message}`,
+          tone: 'info' as const,
+        }
+      }
+    }
+
+    switch (requestStage) {
+      case 'requesting':
+        return {
+          label: '发送请求中',
+          detail: '正在提交设计请求到后端',
+          tone: 'info' as const,
+        }
+      case 'ai-processing':
+        return {
+          label: 'AI 处理中',
+          detail: '正在生成电路代码',
+          tone: 'info' as const,
+        }
+      case 'compiling':
+        return {
+          label: '代码编译中',
+          detail: '正在编译并分析电路代码',
+          tone: 'info' as const,
+        }
+      case 'validating':
+        return {
+          label: '检查中',
+          detail: '正在执行电路校验与导出检查',
+          tone: 'warning' as const,
+        }
+      case 'fixing':
+        return {
+          label: 'AI 修复中',
+          detail: '检测到问题，正在尝试自动修复',
+          tone: 'warning' as const,
+        }
+      case 'rendering':
+        return {
+          label: '渲染中',
+          detail: '正在生成 PCB / 原理图预览',
+          tone: 'info' as const,
+        }
+      case 'completed':
+        return {
+          label: '渲染完成',
+          detail: '预览已准备就绪',
+          tone: 'success' as const,
+        }
+      case 'failed':
+        return {
+          label: '检查到错误',
+          detail: '流程中断，请查看错误信息',
+          tone: 'error' as const,
+        }
+      default:
+        return {
+          label: '准备就绪',
+          detail: '输入需求后即可开始生成电路',
+          tone: 'idle' as const,
+        }
+    }
+  }, [logs, requestStage, error])
+
+  useEffect(() => {
+    if (isProcessing && (pcbSvg || schematicSvg)) {
+      setRequestStage('rendering')
+    }
+  }, [isProcessing, pcbSvg, schematicSvg])
+
+  useEffect(() => {
+    if (!isProcessing && !error && (pcbSvg || schematicSvg)) {
+      setRequestStage('completed')
+    }
+  }, [isProcessing, error, pcbSvg, schematicSvg])
+
+  useEffect(() => {
+    if (error) {
+      setRequestStage('failed')
+      return
+    }
+
+    const lastLog = logs[logs.length - 1]
+    if (!isProcessing || !lastLog) return
+
+    const context = lastLog.context.toLowerCase()
+    const message = lastLog.message.toLowerCase()
+
+    if (lastLog.level === 'error') {
+      setRequestStage('failed')
+      return
+    }
+
+    if (context.includes('autofix') || message.includes('auto-fix')) {
+      setRequestStage('fixing')
+      return
+    }
+
+    if (context.includes('validation') || context.includes('erc') || context.includes('drc')) {
+      setRequestStage('validating')
+      return
+    }
+
+    if (context.includes('compile') || message.includes('compilation')) {
+      setRequestStage('compiling')
+      return
+    }
+
+    if (
+      context.includes('ai-generation') ||
+      context.includes('llm') ||
+      message.includes('calling llm') ||
+      message.includes('llm response received')
+    ) {
+      setRequestStage('ai-processing')
+      return
+    }
+
+    if (context.includes('postprocess') || message.includes('schematic svg') || message.includes('render')) {
+      setRequestStage('rendering')
+    }
+  }, [logs, isProcessing, error])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,10 +257,13 @@ export function ConsoleInterface() {
 
     setIsProcessing(true)
     setError(null)
+    setSuccessMessage(null)
     setGeneratedCode(null)
     setCircuitJson(null)
     setPcbSvg(null)
     setSchematicSvg(null)
+    setKicadFiles(null)
+    setRequestStage('requesting')
 
     try {
       const genRes = await fetch('/api/generate', {
@@ -37,29 +274,54 @@ export function ConsoleInterface() {
 
       if (!genRes.ok) throw new Error('Generation failed')
 
+      setRequestStage('ai-processing')
       const genData = await genRes.json()
       if (!genData.success) throw new Error(genData.error?.message || 'Generation failed')
 
       const code = genData.data.code
       setGeneratedCode(code)
+      setRequestStage(workspace ? 'validating' : 'compiling')
 
-      const compileRes = await fetch('/api/compile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      })
+      if (workspace) {
+        const exportRes = await fetch('/api/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            options: { workspace },
+          }),
+        })
 
-      if (compileRes.ok) {
-        const compileData = await compileRes.json()
-        if (compileData.success && compileData.data) {
-          setCircuitJson(compileData.data.circuitJson)
+        const exportData = await exportRes.json().catch(() => ({ error: 'Unknown error' }))
 
-          if (compileData.data.pcbSvg) {
-            setPcbSvg(compileData.data.pcbSvg)
-          }
-          if (compileData.data.schematicSvg) {
-            setSchematicSvg(compileData.data.schematicSvg)
-          }
+        if (!exportRes.ok || !exportData.success || !exportData.data) {
+          throw new Error(exportData.error?.message || 'Export failed')
+        }
+
+        setRequestStage('rendering')
+        applyPipelineResult(exportData.data)
+      } else {
+        const compileRes = await fetch('/api/compile-and-convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+
+        const compileData = await compileRes.json().catch(() => ({ error: 'Unknown error' }))
+
+        if (!compileRes.ok || !compileData.success || !compileData.data) {
+          throw new Error(compileData.error?.message || 'Compilation failed')
+        }
+
+        setRequestStage('rendering')
+        setCircuitJson(compileData.data.circuitJson)
+        setKicadFiles(compileData.data.kicadFiles ?? null)
+
+        if (compileData.data.pcbSvg) {
+          setPcbSvg(compileData.data.pcbSvg)
+        }
+        if (compileData.data.schematicSvg) {
+          setSchematicSvg(compileData.data.schematicSvg)
         }
       }
     } catch (err) {
@@ -127,38 +389,49 @@ export function ConsoleInterface() {
   }
 
   const handleExport = async () => {
-    if (!prompt.trim()) return
+    if (!workspace) {
+      setError('请先选择工作空间')
+      return
+    }
+
+    if (!prompt.trim() || !generatedCode || !kicadFiles) {
+      setError('请先生成可保存的电路结果')
+      return
+    }
 
     setIsProcessing(true)
     setError(null)
+    setSuccessMessage(null)
+    setRequestStage('validating')
 
     try {
-      const res = await fetch('/api/export', {
-        method: 'POST',
+      const res = await fetch('/api/workspace', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          path: workspace,
           prompt,
-          options: workspace ? { workspace } : {},
+          code: generatedCode,
+          kicadFiles,
+          isValid: true,
         }),
       })
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errorData.error?.message || 'Export failed')
+      const data = await res.json().catch(() => ({ error: 'Unknown error' }))
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || 'Save to workspace failed')
       }
 
-      const data = await res.json()
+      setRequestStage('completed')
 
-      if (data.success) {
-        if (data.versionId) {
-          alert(`已保存版本: ${data.versionId}`)
-        } else {
-          alert('导出成功（临时模式）')
-        }
+      if (data.versionId) {
+        setSuccessMessage(`已保存版本: ${data.versionId}`)
       } else {
-        throw new Error(data.error?.message || 'Export failed')
+        setSuccessMessage('保存成功')
       }
     } catch (err) {
+      setRequestStage('failed')
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
     } finally {
       setIsProcessing(false)
@@ -198,6 +471,32 @@ export function ConsoleInterface() {
             </button>
           </form>
 
+          {successMessage && (
+            <div className="inline-notice success">
+              <span>{successMessage}</span>
+              <button
+                type="button"
+                className="inline-notice-close"
+                onClick={() => setSuccessMessage(null)}
+              >
+                关闭
+              </button>
+            </div>
+          )}
+
+          {error && !isProcessing && (
+            <div className="inline-notice error">
+              <span>{error}</span>
+              <button
+                type="button"
+                className="inline-notice-close"
+                onClick={() => setError(null)}
+              >
+                关闭
+              </button>
+            </div>
+          )}
+
           <div className="logs-section">
             <div className="section-title">系统日志</div>
             <LogViewer logs={logs} className="log-viewer-component" onClear={clearLogs} />
@@ -216,39 +515,15 @@ export function ConsoleInterface() {
                 </span>
               )}
             </div>
-            {error ? (
-              <div className="error-message-box">
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 48 48"
-                  fill="none"
-                  style={{ marginBottom: '12px' }}
-                >
-                  <title>错误提示</title>
-                  <circle cx="24" cy="24" r="20" stroke="#f48771" strokeWidth="2" fill="none" />
-                  <path
-                    d="M24 16v12M24 32v2"
-                    stroke="#f48771"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div>{error}</div>
-                <button
-                  type="button"
-                  onClick={() => setError(null)}
-                  className="error-dismiss-btn"
-                  style={{ marginTop: '12px' }}
-                >
-                  关闭
-                </button>
-              </div>
-            ) : isProcessing ? (
+            <div className={`preview-progress preview-progress-${progressState.tone}`}>
+              <div className="preview-progress-label">{progressState.label}</div>
+              <div className="preview-progress-detail">{progressState.detail}</div>
+            </div>
+            {isProcessing ? (
               <div className="processing-message">
                 <div className="spinner" />
-                <p>正在生成电路设计...</p>
-                <p className="processing-hint">正在编译代码并生成预览图</p>
+                <p>{progressState.label}</p>
+                <p className="processing-hint">{progressState.detail}</p>
               </div>
             ) : (
               <SchematicViewer
@@ -451,6 +726,86 @@ export function ConsoleInterface() {
           letter-spacing: normal;
         }
 
+        .preview-progress {
+          border: 1px solid #333;
+          background: #141414;
+          border-radius: 6px;
+          padding: 10px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .preview-progress-label {
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: #f5f5f5;
+        }
+
+        .preview-progress-detail {
+          font-size: 0.78rem;
+          color: #9a9a9a;
+          line-height: 1.4;
+        }
+
+        .preview-progress-info {
+          border-color: #3b4f68;
+          background: rgba(59, 79, 104, 0.18);
+        }
+
+        .preview-progress-warning {
+          border-color: #7a5b1f;
+          background: rgba(122, 91, 31, 0.18);
+        }
+
+        .preview-progress-error {
+          border-color: #7a2f2f;
+          background: rgba(122, 47, 47, 0.2);
+        }
+
+        .preview-progress-success {
+          border-color: #2f6a3d;
+          background: rgba(47, 106, 61, 0.18);
+        }
+
+        .preview-progress-idle {
+          border-color: #333;
+          background: #141414;
+        }
+
+        .inline-notice {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          border-radius: 6px;
+          padding: 10px 12px;
+          font-size: 0.9rem;
+        }
+
+        .inline-notice.success {
+          border: 1px solid #2f6a3d;
+          background: rgba(47, 106, 61, 0.18);
+          color: #b9f3c6;
+        }
+
+        .inline-notice.error {
+          border: 1px solid #7a2f2f;
+          background: rgba(122, 47, 47, 0.2);
+          color: #f7b0b0;
+        }
+
+        .inline-notice-close {
+          background: transparent;
+          border: 1px solid currentColor;
+          color: inherit;
+          padding: 4px 10px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 12px;
+          flex-shrink: 0;
+        }
+
         .log-viewer-component {
             flex: 1;
             height: 100%;
@@ -471,38 +826,6 @@ export function ConsoleInterface() {
             flex: 1;
             min-height: 0;
             min-width: 0;
-        }
-
-        .error-message-box {
-            background: #111;
-            border: 1px solid #f48771;
-            border-radius: 6px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #f48771;
-            padding: 40px 20px;
-            text-align: center;
-            max-width: 80%;
-            margin: auto;
-        }
-
-        .error-dismiss-btn {
-            background: transparent;
-            border: 1px solid #f48771;
-            color: #f48771;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s;
-        }
-
-        .error-dismiss-btn:hover {
-            background: #f48771;
-            color: #111;
         }
 
         .processing-message {

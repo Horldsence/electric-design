@@ -8,6 +8,10 @@ HTTP API layer - POST endpoints wrapping service calls with input validation.
 - `compile.ts` - tscircuit code → Circuit JSON
 - `convert.ts` - Circuit JSON → KiCad files
 - `compile-and-convert.ts` - Compile + convert combined
+- `generate.ts` - AI code generation endpoint (if implemented)
+- `download-*.ts` - File download endpoints (KiCad files, Gerbers, BOM)
+- `validate-kicad.ts` - KiCad validation endpoint
+- `export-*.ts` - Gerber/BOM export endpoints
 
 ## CONVENTIONS
 - POST handlers only

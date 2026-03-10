@@ -1,5 +1,5 @@
 import type React from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LogEntry } from '../lib/logger'
 
 interface LogViewerProps {
@@ -130,12 +130,27 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, style, className, on
   const [autoScroll, setAutoScroll] = useState(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
+  const logsWithStableKeys = useMemo(() => {
+    const occurrenceMap = new Map<string, number>()
+
+    return logs.map(log => {
+      const baseKey = `${log.timestamp}-${log.context}-${log.message}`
+      const occurrence = occurrenceMap.get(baseKey) ?? 0
+      occurrenceMap.set(baseKey, occurrence + 1)
+
+      return {
+        log,
+        key: `${baseKey}-${occurrence}`,
+      }
+    })
+  }, [logs])
+
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
     if (scrollRef.current && autoScroll) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [autoScroll])
+  }, [autoScroll, logsWithStableKeys])
 
   // Detect if user has scrolled away from bottom
   const handleScroll = () => {
@@ -219,8 +234,8 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logs, style, className, on
       {/* Log Container */}
       <div style={{ ...styles.container, ...style }} ref={scrollRef} onScroll={handleScroll}>
         {logs.length === 0 && <div style={{ color: '#666', fontStyle: 'italic' }}>等待日志...</div>}
-        {logs.map(log => (
-          <div key={`${log.timestamp}-${log.context}-${log.message}`} style={styles.entry}>
+        {logsWithStableKeys.map(({ log, key }) => (
+          <div key={key} style={styles.entry}>
             <span style={styles.timestamp}>[{formatTime(log.timestamp)}]</span>
             <span
               style={{

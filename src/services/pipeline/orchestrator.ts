@@ -1,3 +1,6 @@
+import type { AnyCircuitElement } from 'circuit-json'
+// @ts-ignore
+import { convertCircuitJsonToPcbSvg, convertCircuitJsonToSchematicSvg } from 'circuit-to-svg'
 import { createPipelineLogger } from '../../lib/debug'
 import { FileManager } from '../../lib/file-manager'
 import type { DrcResult, ErcResult } from '../../types/kicad'
@@ -16,7 +19,11 @@ type PipelineResult = {
     circuitJson: unknown[]
     kicadFiles: { pcb: string; sch: string }
     validation: { isValid: boolean; errors: unknown[] }
-    artifacts?: unknown
+    artifacts?: {
+      pcbSvg?: string
+      schematicSvg?: string | null
+      [key: string]: unknown
+    }
     ercResult?: DrcResult | ErcResult
     drcResult?: DrcResult | ErcResult
     autoFixResult?: {
@@ -305,7 +312,7 @@ export async function runPipeline(
       throw error
     }
 
-    const artifacts = options
+    const postProcessArtifacts = options
       ? await postProcess(
           kicadFiles,
           {
@@ -317,7 +324,26 @@ export async function runPipeline(
         )
       : undefined
 
-    log.info('Pipeline completed successfully')
+    const previewCircuitJson = circuitJson as AnyCircuitElement[]
+    const pcbSvg = convertCircuitJsonToPcbSvg(previewCircuitJson)
+
+    let schematicSvg: string | null = null
+    try {
+      schematicSvg = convertCircuitJsonToSchematicSvg(previewCircuitJson)
+    } catch (error) {
+      log.warn('Failed to generate schematic SVG preview', error)
+    }
+
+    const artifacts = {
+      ...(postProcessArtifacts || {}),
+      pcbSvg,
+      schematicSvg,
+    }
+
+    log.info('Pipeline completed successfully', {
+      hasPcbSvg: Boolean(pcbSvg),
+      hasSchematicSvg: Boolean(schematicSvg),
+    })
 
     let versionId: string | undefined
 

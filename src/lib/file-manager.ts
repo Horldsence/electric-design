@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type {
   CreateVersionOptions,
   InitWorkspaceOptions,
+  SaveWorkspaceResultRequest,
   WorkspaceMeta,
   WorkspaceVersion,
 } from '../types/workspace'
@@ -97,6 +98,24 @@ export class FileManager {
     logger.info('version-created', `Version ${versionId} created`, { versionId, isValid })
 
     return versionId
+  }
+
+  async saveGeneratedResult(options: SaveWorkspaceResultRequest): Promise<string> {
+    const {
+      code,
+      prompt,
+      kicadFiles,
+      timestamp = Date.now(),
+      isValid = true,
+    } = options
+
+    return this.createVersion({
+      code,
+      prompt,
+      timestamp,
+      isValid,
+      kicadFiles,
+    })
   }
 
   async getCurrentVersion(): Promise<WorkspaceVersion | null> {

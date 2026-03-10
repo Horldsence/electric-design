@@ -38,6 +38,18 @@ export interface CreateVersionOptions {
   }
 }
 
+export interface SaveWorkspaceResultRequest {
+  path: string
+  code: string
+  prompt: string
+  timestamp?: number
+  isValid?: boolean
+  kicadFiles: {
+    pcb: string
+    sch: string
+  }
+}
+
 export interface InitWorkspaceOptions {
   path: string
   name?: string

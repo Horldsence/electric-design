@@ -254,7 +254,9 @@ electric-design/
 │   ├── types/                      # 类型定义
 │   │   ├── tscircuit.ts            # Circuit JSON类型
 │   │   ├── kicad.ts                # KiCad文件类型
-│   │   └── pipeline.ts             # Pipeline数据类型
+│   │   ├── ai.ts                   # AI错误类型
+│   │   ├── errors.ts               # 增强编译错误类型
+│   │   └── index.ts                # 类型导出
 │   │
 │   ├── services/                   # 核心业务逻辑（数据转换）
 │   │   ├── ai/
@@ -263,7 +265,8 @@ electric-design/
 │   │   │
 │   │   ├── tscircuit/
 │   │   │   ├── compiler.ts         # TSX → Circuit JSON
-│   │   │   └── validator.ts        # @tscircuit/checks包装
+│   │   │   ├── validator.ts        # @tscircuit/checks包装
+│   │   │   └── error-extractor.ts  # 错误提取器（新增）
 │   │   │
 │   │   ├── kicad/
 │   │   │   ├── converter.ts        # Circuit JSON → KiCad
@@ -274,32 +277,65 @@ electric-design/
 │   │       └── error-handler.ts    # 统一错误处理
 │   │
 │   ├── routes/                     # API路由（薄包装）
-│   │   ├── generate.ts             # POST /api/generate
+│   │   ├── export.ts               # POST /api/export (完整pipeline)
 │   │   ├── compile.ts              # POST /api/compile
 │   │   ├── convert.ts              # POST /api/convert
-│   │   └── export.ts               # POST /api/export (完整pipeline)
+│   │   ├── compile-and-convert.ts  # POST /api/compile-and-convert
+│   │   └── [其他端点]              # download, validate, export-*
 │   │
 │   ├── lib/                        # 工具库
 │   │   ├── logger.ts               # 结构化日志
+│   │   ├── debug.ts                # Pipeline日志
 │   │   ├── file-manager.ts         # 文件I/O
+│   │   ├── socket-manager.ts       # WebSocket管理
+│   │   ├── source-utils.ts         # 源代码工具（新增）
 │   │   └── config.ts               # 环境配置
 │   │
-│   └── web/                        # 前端组件
-│       ├── App.tsx
-│       ├── components/
-│       │   ├── InputPanel.tsx
-│       │   ├── CodeViewer.tsx
-│       │   └── ResultViewer.tsx
-│       └── api/
-│           └── client.ts
+│   ├── components/                 # 前端组件（实现）
+│   │   ├── ConsoleInterface.tsx    # 主界面
+│   │   ├── LogViewer.tsx           # 日志查看器
+│   │   ├── SchematicViewer.tsx     # 原理图查看器
+│   │   └── WorkspaceSelector.tsx   # 工作区选择器
+│   │
+│   ├── web/                        # Web资源（空壳）
+│   │   ├── components/             # (未实现)
+│   │   └── api/                    # (未实现)
+│   │
+│   ├── hooks/                      # React Hooks
+│   │   └── use-socket.ts           # WebSocket Hook
+│   │
+│   ├── util/                       # 辅助工具
+│   │   └── file-writer.ts          # 文件写入
+│   │
+│   ├── App.tsx                     # React根组件
+│   ├── frontend.tsx                # React入口
+│   └── index.html                  # HTML模板
 │
 ├── tests/                          # bun test
 │   ├── unit/                       # 单元测试
 │   ├── integration/                # 集成测试
-│   └── e2e/                        # 端到端测试
+│   ├── examples/                   # 测试fixtures
+│   ├── output/                     # 测试输出
+│   └── debug-*.ts                  # 调试脚本
+│
+├── docs/                           # 项目文档
+├── images/                         # README资源
+├── session/                        # 会话历史（非标准）
+├── projects/                       # 工作区（非标准）
 │
 └── package.json
 ```
+
+## 子目录 AGENTS.md
+
+各主要模块有独立的 AGENTS.md 文档：
+
+- **[src/services/AGENTS.md](src/services/AGENTS.md)** - 核心业务逻辑层
+- **[src/routes/AGENTS.md](src/routes/AGENTS.md)** - HTTP API 路由层
+- **[src/lib/AGENTS.md](src/lib/AGENTS.md)** - 工具库和基础设施
+- **[src/components/AGENTS.md](src/components/AGENTS.md)** - React 前端组件
+- **[src/types/AGENTS.md](src/types/AGENTS.md)** - TypeScript 类型定义
+- **[tests/integration/AGENTS.md](tests/integration/AGENTS.md)** - 集成测试
 
 ## 核心模块设计
 

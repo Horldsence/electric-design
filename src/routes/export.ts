@@ -29,6 +29,18 @@ export async function POST(req: Request) {
           kicadFiles: result.data.kicadFiles,
           validation: result.data.validation,
           artifacts: result.data.artifacts,
+          pcbSvg:
+            result.data.artifacts &&
+            typeof result.data.artifacts === 'object' &&
+            'pcbSvg' in result.data.artifacts
+              ? result.data.artifacts.pcbSvg
+              : undefined,
+          schematicSvg:
+            result.data.artifacts &&
+            typeof result.data.artifacts === 'object' &&
+            'schematicSvg' in result.data.artifacts
+              ? result.data.artifacts.schematicSvg
+              : undefined,
         },
       })
     }

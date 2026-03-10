@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
     const { prompt, options } = body
-    const { workspace: workspacePath, workspaceName } = options || {}
+    const { workspace: workspacePath, workspaceName, versionId: targetVersionId } = options || {}
 
     if (!prompt || typeof prompt !== 'string') {
       return Response.json(
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         prompt,
         kicadFiles: result.data.kicadFiles,
         isValid: true,
+        versionId: targetVersionId,
       })
 
       workspaceMeta = await fileManager.getMeta()

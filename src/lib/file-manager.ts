@@ -101,7 +101,20 @@ export class FileManager {
   }
 
   async saveGeneratedResult(options: SaveWorkspaceResultRequest): Promise<string> {
-    const { code, prompt, kicadFiles, timestamp = Date.now(), isValid = true } = options
+    const { code, prompt, kicadFiles, timestamp = Date.now(), isValid = true, versionId } = options
+
+    if (versionId) {
+      await this.updateVersionCode(versionId, code, isValid)
+      if (kicadFiles) {
+        await this.writeKiCadFiles(kicadFiles.pcb, kicadFiles.sch)
+      }
+      await this.updateMeta(meta => ({
+        ...meta,
+        versions: meta.versions.map(v => (v.id === versionId ? { ...v, prompt, kicadFiles, timestamp } : v)),
+        lastModified: Date.now(),
+      }))
+      return versionId
+    }
 
     return this.createVersion({
       code,

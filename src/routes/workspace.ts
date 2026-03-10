@@ -53,7 +53,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = (await req.json()) as SaveWorkspaceResultRequest
-    const { path, code, prompt, kicadFiles, timestamp, isValid = true } = body
+    const { path, code, prompt, kicadFiles, timestamp, isValid = true, versionId } = body
 
     if (!path || typeof path !== 'string') {
       return Response.json(
@@ -116,32 +116,24 @@ export async function PUT(req: Request) {
     const exists = await fileManager.exists()
 
     if (!exists) {
-      return Response.json(
-        {
-          success: false,
-          error: {
-            type: 'workspace_not_found',
-            message: 'Workspace not found',
-          },
-        },
-        { status: 404 },
-      )
+      await fileManager.init({ path })
     }
 
-    const versionId = await fileManager.saveGeneratedResult({
+    const savedVersionId = await fileManager.saveGeneratedResult({
       path,
       code,
       prompt,
       timestamp,
       isValid,
       kicadFiles,
+      versionId,
     })
 
     const meta = await fileManager.getMeta()
 
     return Response.json({
       success: true,
-      versionId,
+      versionId: savedVersionId,
       data: meta,
     })
   } catch (error) {

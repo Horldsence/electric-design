@@ -1,13 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { WorkspaceMeta } from '../types/workspace'
 
 interface WorkspaceSelectorProps {
   onWorkspaceSelect: (workspacePath: string | null) => void
   currentWorkspace: string | null
+  onVersionSelect?: (versionId: string) => void
+  onNewVersion?: () => void
+  refreshKey?: string | number
+  activeVersionId?: string | null
 }
 
-export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace }: WorkspaceSelectorProps) {
+export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace, onVersionSelect, onNewVersion, refreshKey, activeVersionId }: WorkspaceSelectorProps) {
   const [workspacePath, setWorkspacePath] = useState(currentWorkspace || '')
+  const [workspaceName, setWorkspaceName] = useState('')
   const [meta, setMeta] = useState<WorkspaceMeta | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +63,7 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace }: Works
       const res = await fetch('/api/workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: workspacePath }),
+        body: JSON.stringify({ path: workspacePath, name: workspaceName }),
       })
 
       if (!res.ok) {
@@ -89,6 +94,13 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace }: Works
     setError(null)
   }
 
+  useEffect(() => {
+    if (workspacePath) {
+      handleInitWorkspace()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
+
   return (
     <div className="workspace-selector">
       <div className="workspace-header">
@@ -96,6 +108,13 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace }: Works
       </div>
 
       <div className="workspace-input-group">
+        <input
+          type="text"
+          className="workspace-input"
+          placeholder="工作空间名称 (可选)"
+          value={workspaceName}
+          onChange={e => setWorkspaceName(e.target.value)}
+        />
         <input
           type="text"
           className="workspace-input"
@@ -158,6 +177,30 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace }: Works
             <div className="workspace-info-item">
               <span className="label">当前版本:</span>
               <span className="value">{meta.currentVersion}</span>
+            </div>
+          )}
+          {meta.versions && meta.versions.length > 0 && (
+            <div className="workspace-versions">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div className="workspace-versions-title" style={{ margin: 0 }}>历史版本</div>
+                {onNewVersion && (
+                  <button type="button" className="workspace-btn secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', flex: 'none' }} onClick={onNewVersion}>
+                    新建版本
+                  </button>
+                )}
+              </div>
+              <ul className="workspace-versions-list">
+                {meta.versions.map(v => (
+                  <li 
+                    key={v.id} 
+                    className={`workspace-version-item ${v.id === (activeVersionId !== undefined ? activeVersionId : meta.currentVersion) ? 'active' : ''}`}
+                    onClick={() => onVersionSelect?.(v.id)}
+                  >
+                    <span className="version-id">{v.id}</span>
+                    <span className="version-time">{new Date(v.timestamp).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
@@ -283,6 +326,58 @@ export function WorkspaceSelector({ onWorkspaceSelect, currentWorkspace }: Works
         .workspace-info-item .value {
           color: #eee;
           font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .workspace-versions {
+          margin-top: 12px;
+          border-top: 1px dashed #333;
+          padding-top: 12px;
+        }
+
+        .workspace-versions-title {
+          font-size: 0.8rem;
+          color: #888;
+          margin-bottom: 8px;
+        }
+
+        .workspace-versions-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          max-height: 150px;
+          overflow-y: auto;
+        }
+
+        .workspace-version-item {
+          display: flex;
+          justify-content: space-between;
+          padding: 6px 8px;
+          background: #222;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 0.8rem;
+          transition: background 0.2s;
+        }
+
+        .workspace-version-item:hover {
+          background: #333;
+        }
+
+        .workspace-version-item.active {
+          background: rgba(251, 240, 223, 0.1);
+          border: 1px solid rgba(251, 240, 223, 0.3);
+        }
+
+        .version-id {
+          color: #eee;
+          font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .version-time {
+          color: #666;
         }
       `}</style>
     </div>

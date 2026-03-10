@@ -8,7 +8,9 @@ import { WorkspaceSelector } from './WorkspaceSelector'
 
 export function ConsoleInterface() {
   const { logs, status, clearLogs } = useSocket()
-  const [workspace, setWorkspace] = useState<string | null>(null)
+  const [workspace, setWorkspace] = useState<string | null>('./projects/default-workspace')
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [prompt, setPrompt] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [generatedCode, setGeneratedCode] = useState<string | null>(null)
@@ -288,7 +290,7 @@ export function ConsoleInterface() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             prompt,
-            options: { workspace },
+            options: { workspace, versionId: currentVersionId || undefined },
           }),
         })
 
@@ -296,6 +298,11 @@ export function ConsoleInterface() {
 
         if (!exportRes.ok || !exportData.success || !exportData.data) {
           throw new Error(exportData.error?.message || 'Export failed')
+        }
+
+        if (exportData.versionId) {
+          setCurrentVersionId(exportData.versionId)
+          setRefreshKey(prev => prev + 1)
         }
 
         setRequestStage('rendering')
@@ -388,51 +395,52 @@ export function ConsoleInterface() {
     }
   }
 
-  const handleExport = async () => {
-    if (!workspace) {
-      setError('请先选择工作空间')
-      return
-    }
+  const handleVersionSelect = async (versionId: string) => {
+    if (!workspace) return
 
-    if (!prompt.trim() || !generatedCode || !kicadFiles) {
-      setError('请先生成可保存的电路结果')
-      return
-    }
-
+    setCurrentVersionId(versionId)
     setIsProcessing(true)
     setError(null)
-    setSuccessMessage(null)
-    setRequestStage('validating')
+    setSuccessMessage(`加载版本: ${versionId}...`)
 
     try {
-      const res = await fetch('/api/workspace', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: workspace,
-          prompt,
-          code: generatedCode,
-          kicadFiles,
-          isValid: true,
-        }),
-      })
-
+      const res = await fetch(`/api/workspace?path=${encodeURIComponent(workspace)}&versionId=${versionId}`)
       const data = await res.json().catch(() => ({ error: 'Unknown error' }))
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || 'Save to workspace failed')
+        throw new Error(data.error?.message || 'Failed to load version')
+      }
+
+      const { code } = data.data
+      setGeneratedCode(code)
+
+      const compileRes = await fetch('/api/compile-and-convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+
+      const compileData = await compileRes.json().catch(() => ({ error: 'Unknown error' }))
+
+      if (!compileRes.ok || !compileData.success || !compileData.data) {
+        throw new Error(compileData.error?.message || 'Compilation failed')
       }
 
       setRequestStage('completed')
+      setCircuitJson(compileData.data.circuitJson)
+      setKicadFiles(compileData.data.kicadFiles ?? null)
 
-      if (data.versionId) {
-        setSuccessMessage(`已保存版本: ${data.versionId}`)
-      } else {
-        setSuccessMessage('保存成功')
+      if (compileData.data.pcbSvg) {
+        setPcbSvg(compileData.data.pcbSvg)
       }
+      if (compileData.data.schematicSvg) {
+        setSchematicSvg(compileData.data.schematicSvg)
+      }
+      setSuccessMessage(`已加载版本: ${versionId}`)
     } catch (err) {
       setRequestStage('failed')
-      setError(err instanceof Error ? err.message : 'An unknown error occurred')
+      setError(err instanceof Error ? err.message : '加载版本失败')
+      setSuccessMessage(null)
     } finally {
       setIsProcessing(false)
     }
@@ -450,7 +458,17 @@ export function ConsoleInterface() {
         <h2>AI 电路设计器</h2>
       </header>
 
-      <WorkspaceSelector onWorkspaceSelect={setWorkspace} currentWorkspace={workspace} />
+      <WorkspaceSelector 
+        onWorkspaceSelect={setWorkspace} 
+        currentWorkspace={workspace} 
+        onVersionSelect={handleVersionSelect}
+        onNewVersion={() => {
+          setCurrentVersionId(null)
+          setSuccessMessage('已新建版本，下次生成将保存为新版本')
+        }}
+        refreshKey={refreshKey}
+        activeVersionId={currentVersionId}
+      />
 
       <div className="main-layout">
         <div className="left-panel">
@@ -538,16 +556,6 @@ export function ConsoleInterface() {
             <div className="actions-section">
               <div className="section-title">导出文件</div>
               <div className="button-group">
-                {workspace && (
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    className="action-btn primary"
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? '处理中...' : '保存到工作空间'}
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => handleDownload('kicad')}

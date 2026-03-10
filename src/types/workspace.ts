@@ -42,6 +42,7 @@ export interface SaveWorkspaceResultRequest {
   path: string
   code: string
   prompt: string
+  versionId?: string
   timestamp?: number
   isValid?: boolean
   kicadFiles: {

@@ -1,6 +1,6 @@
 import type { AnyCircuitElement } from 'circuit-json'
 // @ts-ignore
-import { convertCircuitJsonToPcbSvg, convertCircuitJsonToSchematicSvg } from 'circuit-to-svg'
+import { svgCache } from '../cache/svg-cache'
 import { createPipelineLogger } from '../../lib/debug'
 import { FileManager } from '../../lib/file-manager'
 import type { DrcResult, ErcResult } from '../../types/kicad'
@@ -75,7 +75,7 @@ export async function runPipeline(
 
     const _compileStage = log.stage('compile')
     void _compileStage // Keep for potential future logging
-    const {
+    let {
       circuitJson,
       logs,
       errors: compileErrors,
@@ -199,6 +199,7 @@ export async function runPipeline(
                   `${sessionId}_final`,
                   autoFixResult.fixedCode || '',
                 )
+                circuitJson = fixedCircuitJson as AnyCircuitElement[];
                 kicadFiles = convertToKiCad(fixedCircuitJson)
                 compilerService.cleanup(`${sessionId}_final`)
               } else {
@@ -274,6 +275,7 @@ export async function runPipeline(
                   `${sessionId}_final`,
                   autoFixResult.fixedCode || '',
                 )
+                circuitJson = fixedCircuitJson as AnyCircuitElement[];
                 kicadFiles = convertToKiCad(fixedCircuitJson)
                 compilerService.cleanup(`${sessionId}_final`)
               } else {
@@ -325,14 +327,11 @@ export async function runPipeline(
       : undefined
 
     const previewCircuitJson = circuitJson as AnyCircuitElement[]
-    const pcbSvg = convertCircuitJsonToPcbSvg(previewCircuitJson)
-
-    let schematicSvg: string | null = null
-    try {
-      schematicSvg = convertCircuitJsonToSchematicSvg(previewCircuitJson)
-    } catch (error) {
-      log.warn('Failed to generate schematic SVG preview', error)
-    }
+    const { pcbSvg, schematicSvg } = svgCache.getSvgs(
+      autoFixResult?.fixedCode || generationResult.code,
+      previewCircuitJson,
+      log
+    )
 
     const artifacts = {
       ...(postProcessArtifacts || {}),
